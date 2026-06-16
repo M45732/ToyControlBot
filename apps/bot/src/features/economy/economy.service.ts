@@ -62,6 +62,16 @@ export async function getBalance(
 }
 
 /**
+ * The deterministic toplist order: balance descending, then `userId` as a
+ * stable tie-breaker. Used by both `getRank` and `getToplistPage` so a
+ * user's reported rank always matches their position in the rendered list.
+ */
+const TOPLIST_ORDER_BY: Prisma.TokenBalanceOrderByWithRelationInput[] = [
+  { balance: "desc" },
+  { userId: "asc" },
+];
+
+/**
  * Get a user's 1-based rank in the guild toplist, or `null` if they have no balance row.
  */
 export async function getRank(
@@ -74,10 +84,16 @@ export async function getRank(
   if (!row) {
     return null;
   }
-  const higherCount = await prisma.tokenBalance.count({
-    where: { guildId, balance: { gt: row.balance } },
+  const aheadCount = await prisma.tokenBalance.count({
+    where: {
+      guildId,
+      OR: [
+        { balance: { gt: row.balance } },
+        { balance: row.balance, userId: { lt: userId } },
+      ],
+    },
   });
-  return higherCount + 1;
+  return aheadCount + 1;
 }
 
 /**
@@ -94,7 +110,7 @@ export async function getToplistPage(
 
   const rows = await prisma.tokenBalance.findMany({
     where: { guildId },
-    orderBy: { balance: "desc" },
+    orderBy: TOPLIST_ORDER_BY,
     skip: offset,
     take: TOPLIST_PAGE_SIZE,
   });
