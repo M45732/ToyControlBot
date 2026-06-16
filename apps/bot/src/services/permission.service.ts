@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction, GuildMember } from "discord.js";
+import { GuildMember, type ChatInputCommandInteraction } from "discord.js";
 
 import { UserFacingError } from "../lib/errors.js";
 
@@ -13,16 +13,33 @@ import { UserFacingError } from "../lib/errors.js";
  * Ensure a command is being used inside a guild, and return the invoking
  * member.
  *
+ * `interaction.member` is only a real `GuildMember` (with a `roles` cache
+ * and camelCase fields) when the guild is already cached; otherwise
+ * discord.js falls back to the raw API interaction-member shape, which has a
+ * plain `roles` array and `premium_since` instead. Fetching explicitly when
+ * it isn't a `GuildMember` avoids silently misreading that shape (e.g.
+ * `premiumSince` reading as `undefined` and granting the booster bonus to
+ * everyone).
+ *
  * @throws {UserFacingError} If the interaction has no guild context.
  */
-export function requireGuildMember(
+export async function requireGuildMember(
   interaction: ChatInputCommandInteraction,
-): GuildMember {
-  const member = interaction.member;
-  if (!interaction.guildId || !member || !("roles" in member)) {
+): Promise<GuildMember> {
+  if (!interaction.guildId || !interaction.guild) {
     throw new UserFacingError("This command can only be used inside a server.");
   }
-  return member as GuildMember;
+
+  const member = interaction.member;
+  if (member instanceof GuildMember) {
+    return member;
+  }
+
+  try {
+    return await interaction.guild.members.fetch(interaction.user.id);
+  } catch {
+    throw new UserFacingError("This command can only be used inside a server.");
+  }
 }
 
 /**

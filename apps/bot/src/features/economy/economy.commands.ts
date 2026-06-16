@@ -30,7 +30,7 @@ const dailyCommand: SlashCommand = {
     .setName("daily")
     .setDescription("Get your daily free token"),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const member = requireGuildMember(interaction);
+    const member = await requireGuildMember(interaction);
 
     if (!isVerified(member)) {
       throw new UserFacingError(
@@ -69,7 +69,7 @@ const tokenBalanceCommand: SlashCommand = {
         ),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    requireGuildMember(interaction);
+    await requireGuildMember(interaction);
 
     const view = interaction.options.getString("view") ?? "current";
 
@@ -107,7 +107,7 @@ const tokenToplistCommand: SlashCommand = {
         .setRequired(false),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    requireGuildMember(interaction);
+    await requireGuildMember(interaction);
     await interaction.deferReply();
 
     const targetUser = interaction.options.getUser("user") ?? interaction.user;
