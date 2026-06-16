@@ -1,0 +1,1010 @@
+const { ApplicationCommandType, ApplicationCommandOptionType } = require('discord.js');
+const devmode = true;
+const Command = require('../structures/Command');
+const { EmbedBuilder } = require('discord.js');
+const fs = require('fs');
+const yaml = require('js-yaml');
+const commandName = 'play';
+const { ChartJSNodeCanvas } = require('chartjs-node-canvas');
+const LovenseConnect = require('../util/LovenseConnect-new');
+const { MessageAttachment } = require('discord.js');
+const { sendToLovense, loginLovense, GetConnectedToysLovense, logoutLovense} = require('../util/LovenseConnect-new');
+var stop = false;
+const sleep = require('util').promisify(setTimeout)
+
+	async function testrun(msg, config, clientqon) {
+		//let config = this.client.qonSessions.find(obj => obj.users.includes(msg.author.id));
+		let count = 0;
+		while (stop == false) {
+			count++;
+			//msg.channel.send('5s message update');
+			//let config = this.client.qonSessions.get(msg.id);
+			//let config = this.client.qonSessions.find(obj => obj.users.includes(msg.author.id));
+			config.prevSpeed.shift();
+
+			config.prevSpeed.push(config.curSpeed);
+			//config.curSpeed = speed
+
+
+			const width = 600;
+			const height = 200;
+			/**const chartCallback = (ChartJS) => {
+				
+				// Global config example: https://www.chartjs.org/docs/latest/configuration/
+				ChartJS.defaults.global.elements.rectangle.borderWidth = 2;
+				// Global plugin example: https://www.chartjs.org/docs/latest/developers/plugins.html
+				ChartJS.plugins.register({
+					// plugin implementation
+				});
+				// New chart type example: https://www.chartjs.org/docs/latest/developers/charts.html
+				ChartJS.controllers.MyType = ChartJS.DatasetController.extend({
+					// chart implementation
+				});
+			};*/
+			//const canvasRenderService = new CanvasRenderService(width, height, chartCallback);
+			
+			/**const canvasRenderService = new ChartJSNodeCanvas( width, height, (ChartJS) => {
+				ChartJS.plugins.register({
+					beforeDraw: (chart, configuration) => {
+						const ctx = chart.ctx;
+						ctx.save();
+						ctx.fillStyle = '#000000';
+						ctx.fillRect(0, 0, width, height);
+						ctx.restore();
+					}
+				});
+			}
+			);*/
+			//const image = await canvasRenderService.renderToBuffer(configuration);
+			const chartCallback = (ChartJS) => {
+				// Global config example: https://www.chartjs.org/docs/latest/configuration/
+				//ChartJS.defaults.global.elements.rectangle.borderWidth = 2;
+			};
+
+			const canvasRenderService = new ChartJSNodeCanvas({ width, height, chartCallback});
+
+			(async () => {
+
+				//var prevSpeeds = config.prevSpeed.join(', ');
+
+				const configuration = {
+					type: 'line',
+					data: {
+						labels: ['60', '55', '50', '45', '40', '35', '30', '25', '20', '15', '10', '5', 'now'],
+						datasets: [{
+							label: 'Voted power',
+							data: [config.prevSpeed[0], config.prevSpeed[1], config.prevSpeed[2], config.prevSpeed[3], config.prevSpeed[4], config.prevSpeed[5], config.prevSpeed[6], config.prevSpeed[7], config.prevSpeed[8], config.prevSpeed[9], config.prevSpeed[10], config.prevSpeed[11], config.curSpeed],
+							backgroundColor: [
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)',
+								'rgba(255, 0, 102, 0.2)'
+							],
+							borderColor: [
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)',
+								'rgba(255, 99, 132, 1)'
+							],
+							pointRadius: [
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								0,
+								5
+
+							],
+							borderWidth: 1,
+							fill: true
+						}]
+					},
+					options: {
+						legend: {
+							labels: {
+								// This more specific font property overrides the global property
+								fontColor: 'white'
+							}
+						},
+						scales: {
+							x: {
+								ticks: {
+									fontColor: 'white',
+									beginAtZero: false,
+									//callback: (value) => value + 's ago'
+								}
+							},
+							y: {
+								color: 'white',
+								title: {color: 'white'},
+								ticks: {
+									fontColor: 'white',
+									beginAtZero: true,
+									display: true,
+									max: 5,
+									min: 0,
+									stepSize: 1,
+									suggestedMax: 5,
+									suggestedMin: 0,
+									//callback: (value) => 'power ' + value
+									callback: function(value, index, ticks) {
+										return 'power' + value;
+									}
+								}											
+							}
+						}
+					}
+				};
+				//const image = await canvasRenderService.renderToBuffer(configuration);
+				//const dataUrl = await canvasRenderService.renderToDataURL(configuration);
+
+				const image = canvasRenderService.renderToBufferSync(configuration );
+				fs.writeFileSync(`charts/${msg.id}.png`, image);
+				//const fs = require('fs')
+				//const out = fs.createWriteStream(__dirname + '/test.png')
+				//const stream = canvasRenderService.render()
+				////out.on('finish', () =>  console.log('The PNG file was created.'))
+				const exampleEmbed = new EmbedBuilder()
+				.setTitle('Some title')
+				.setImage(`attachment://${msg.id}.png`);
+
+
+				const attachment = new MessageAttachment(image)
+				//msg.channel.send({ embeds: [exampleEmbed], files: [attachment] }).then(setTimeout(() => msg.delete(), 5000));
+			//const image = await canvas.renderToBuffer(configuration)
+			})();
+
+			const embed = msg.embeds[0];
+
+			//embed.spliceFields(3, 1, {name: 'Current Speed', value: `${config.curSpeed}/5`, inline: true});
+			if (count%2 == 0){
+				embed.setFooter("seconds until next vote", "https://im2.ezgif.com/tmp/ezgif-2-c31cc34c6686.gif");
+			} else{
+				embed.setFooter("seconds until next vote!", "https://im2.ezgif.com/tmp/ezgif-2-c31cc34c6686.gif");
+			}
+			
+
+			for (let i=1; i<config.userreacted.length; i++) {
+
+			const userReactions = msg.reactions.cache.filter(reaction => reaction.users.cache.has(config.userreacted[i].userid));
+			try {
+				for (const reaction of userReactions.values()) {
+					await reaction.users.remove(config.userreacted[i].userid);
+				}
+			} catch (error) {
+				console.error('Failed to remove reactions.');
+			}
+			config.userreacted = config.userreacted.filter(item => item.userid !== config.userreacted[i].userid);
+
+}
+				embed.spliceFields(3, 1, {name: 'Current Speed', value: `${config.curSpeed}/5`, inline: true});
+				//embed.spliceFields(6, 1, {name: 'Last Vote', value: `<@${config.userreacted[1].userid}> ${config.userreacted[1].reaction}`, inline: true});
+			
+				//if(config.update_active == false) {
+					//config.update_active = true
+					//this.client.qonSessions.set(reaction.message.id, config);
+					
+					
+
+					LovenseConnect.sendToLovense(
+						config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+					);
+					
+			
+					//embed.setImage('https://cdn.discordapp.com/attachments/790173243364737024/790228781704282132/file.jpg')
+
+					
+					//reaction.message.edit(embed);
+					//reaction.users.remove(user.id);
+					
+					//config.update_active = false;
+					//this.client.qonSessions.set(reaction.message.id, config);
+
+					
+				//}
+			
+			
+
+			//message.reactions.forEach(reaction => reaction.remove(UserID))
+			
+			embed.setImage('https://cdn.discordapp.com/attachments/790173243364737024/790228781704282132/file.jpg')
+
+			embed.spliceFields(6, 1, {name: 'Last Vote', value: `test`, inline: true});
+			msg.edit({embeds: [embed]});
+			
+			let random = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+			//config.update_active = true;
+			//.qonSessions.set(msg.id, config);
+			config.orgy = true;
+			clientqon.set(msg.id, config);
+
+			await sleep(5000);	
+		}
+	}
+	
+	
+	module.exports = {
+
+		name: commandName,
+		group: 'lovense',
+		description: `Logins & plays in the lovense connect`,
+		format: '/play',
+		options: [
+		/**{
+			name: 'url',
+			type: ApplicationCommandOptionType.String,
+			description: 'What anonymous link you want to check?',
+			required: true,
+		},*/
+		/**
+		 * //adding support for control links? (integrate lovenselinkplay)
+		*/
+        {
+            name: 'type',
+            type: ApplicationCommandOptionType.String,
+            description: 'which type?',
+            required: true,
+            choices: [
+                {
+                    name: 'public',
+                    value: `public`,
+					description: 'This will create a public solo session (all verified members can control you via vote system)',
+                },
+                {
+                    name: 'private',
+                    value: `private`,
+					description: 'This will create a private solo session (only members you invite can control you)',
+                },/** 
+                {
+                    name: 'group',
+                    value: `group`,
+					description: 'Invite up to  will create a private group session (only members you invite will have access)',
+                },
+                {
+                    name: 'orgy',
+                    value: `orgy`,
+					description: 'This will create a public orgy session (all verified members can join as controllee and controller)',
+                },
+                {
+                    name: 'tip',
+                    value: `tip`,
+					description: 'This will start a tip play session, just like on the cam sites you just came from ;-)',
+                },
+                {
+                    name: 'botplay',
+                    value: `botplay`,
+					description: 'This will create a private session controlled by our AIs Vibiana & Vibiano.',
+                },*/
+            ]
+        },
+		{
+			name: 'user',
+			type: ApplicationCommandOptionType.User,
+			description: 'if any, please mention the user you want to play with',
+			required: false,
+		}
+	],
+
+/**
+		static delay(ms) {
+			return new Promise(resolve => setTimeout(resolve, ms));
+		}
+	
+*/
+async execute(interaction) {
+	await interaction.reply('Starting play session...');
+	//let msg = interaction.member.id;
+		
+		
+
+		if(interaction.client.qonSessions.find(obj => obj.users.includes(interaction.member.id)) ){
+			let msg2 = await interaction.message.send('You are already controlled in another session, do you want to leave your current session?');
+			msg2.react('✅').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+			msg2.react('❌').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+
+			const filter = (reaction, user) => user.id == interaction.member.id && (reaction.emoji.name == '✅' || reaction.emoji.name == '❌');
+			let reactions = await msg2.awaitReactions({filter, max: 1});
+			switch(reactions.first().emoji.name){
+				case '✅': {
+					//LovenseConnect.sendToLovense(config.users, 0, 'down', 0, 0, 1, 0, 0);
+					//this.client.qonSessions.delete(reaction.message.id);
+					//return msg.channel.send('You left the session and can create a new one with ``!play`` / ``!play orgy``').then(msg => msg.delete({timeout: 5000}));
+					//break;
+					//let config = this.client.qonSessions.get(reaction.message.id);
+
+					let config = interaction.client.qonSessions.find(obj => obj.users.includes(interaction.member.id));
+					//testrun(reaction.message, config);
+					let sessionmessageid = interaction.client.qonSessions.filter(obj => obj.users.includes(interaction.member.id));
+					console.log(sessionmessageid);
+					let iterator1 = sessionmessageid.keys();
+					let messageid = iterator1.next().value; //https://developer.mozilla.org/de/docs/Web/JavaScript/Reference/Global_Objects/Map/keys
+					//let m2 = Object.keys(getid);
+					//let config = this.client.qonSessions.get(messageid);
+					if(config.orgy){
+						//if(!config.users.includes(user.id))
+						//	return reaction.users.remove(user.id);
+
+						//sessionmessageid[0]
+						//hast du dann nicht das array da drin?
+						
+						if(config.users.length == 1){
+							
+							//this.client.qonSessions.delete(reaction.message.id);
+							interaction.client.channels.cache.get(config.channelid).messages.fetch(messageid).then(message => message.delete());
+							//let sessionembed = msg.channel.messages.fetch(messageid);
+							//sessionembed.delete();
+							interaction.client.qonSessions.delete(messageid);
+							
+							//collector.stop(); auto stop after delete
+							LovenseConnect.sendToLovense([interaction.member.id], 0, 0, 'down', 0, 0, 1, 0, 0);
+							return interaction.send('You left the session and can create a new one with ``!play`` / ``!play orgy``').then(msg => msg.delete({timeout: 5000}));
+						}
+
+						config.users.splice(config.users.indexOf(interaction.member.id), 1);
+						LovenseConnect.sendToLovense([interaction.member.id], 0, 0, 'down', 0, 0, 1, 0, 0);
+						const embed = interaction.client.channels.cache.get(config.channelid).messages.fetch(messageid).embeds[0];
+						embed.spliceFields(1, 1, {name: "User / Toys", value: config.users.map(u => `<@${u}>`).join('\n'), inline: true});
+						interaction.client.channels.cache.get(config.channelid).messages.fetch(messageid).edit(embed);
+						interaction.client.qonSessions.set(messageid, config);
+						return interaction.channel.send('You left the session and can create a new one with ``!play`` / ``!play orgy``').then(msg => msg.delete({timeout: 5000}));
+					}else{
+						LovenseConnect.sendToLovense(config.users, 0, 0, 'down', 0, 0, 1, 0, 0);
+						
+						interaction.client.qonSessions.delete(messageid);
+						interaction.client.channels.cache.get(config.channelid).messages.fetch(messageid).then(message => message.delete());
+
+						//collector.stop(); auto stop after delete
+						return;
+					}
+					//break;
+				}
+				case '❌':
+					return interaction.send('Request canceled').then(msg => msg.delete({timeout: 5000}));
+					//break;
+
+			}
+
+		}
+		const lovenseConfig = yaml.load(fs.readFileSync(`./config/lovenseOptions.yml`, 'utf8'));
+
+		let controlee = interaction.member;
+		let uid = -1;
+		let orgy = false;
+		let mentioned;
+		let pList = {};
+		//const cmd = interaction.options.getString('url');
+		const user = interaction.options.getUser('user');
+		const type = interaction.options.getString('type');
+		switch(type) {
+			case 'group':
+				interaction.client.user.setActivity(`with More`);
+				mentioned = user;
+				console.log('Mentioned', mentioned);
+				mentioned.forEach( function ( element, key) {
+					console.log('Entry',element, key);
+					pList[key] = element.username;
+				}, mentioned);
+				console.log(pList);
+				controlee = Object.values(pList).join(', ');
+				interaction.client.user.setActivity(`with ${controlee}`); 
+				break;
+
+			case 'orgy':
+				interaction.client.user.setActivity(`with Plenty! Let's FUCK!`);
+				controlee = '**Lovense Connected**'
+				interaction.client.user.setActivity(`with all who wants!`); 
+				orgy = true;
+				break;
+
+			case 'private':
+				//this.client.user.setActivity(`with More`);
+				mentioned = user;
+				console.log('Mentioned', mentioned);
+				mentioned.forEach( function ( element, key) {
+					console.log('Entry',element, key);
+					pList[key] = element.id;
+				}, mentioned);
+				console.log(pList);
+				controlee = Object.values(pList).join(', ');
+				//mentioned.forEach( function ( element, key) {
+				//	console.log('Entry',element, key);
+				//	pList[key] = element.username;
+				//}, mentioned);
+				//console.log(pList);
+				//controlee = Object.values(pList).join(', ');
+				//this.client.user.setActivity(`with ${controlee}`); 
+				break;
+
+			case 'anonymouse':
+					break;
+
+			case 'stop':
+				//LovenseConnect.logoutLovense(interaction.client, { uid: interaction.member.id, token: lovenseConfig.token }, msg);
+				break;
+		}
+
+		//NOW THE MENTIONED USERS.
+		/* Here we try to set the Members Activity... I have the same problem with getting it currently... on V13
+		const mentionedUsers = user;
+		if (mentionedUsers.size == 0 ) 
+		interaction.client.user.setActivity(`with ${interaction.member.username}`); 
+		*/
+
+		// now setup
+		lovenseConfig.uids = uid;
+		
+		let toy = await GetConnectedToysLovense(interaction.member.id);
+
+		const emojiCharacters = lovenseConfig.reactionNumbers;
+
+
+		const lovenseEmbedThread = new EmbedBuilder();
+		const lovenseEmbed = new EmbedBuilder();
+		//lovenseEmbed.setAuthor(interaction.user.username, interaction.user.avatarURL({dynamic: true}));
+		lovenseEmbed.setThumbnail(interaction.user.displayAvatarURL);
+			//.addField('Default level', lovenseConfig.toy_default_level, true)
+			lovenseEmbed.addFields({name: 'Available reactions', value: '❌ = End / leave the session (Controlled User only)\n:zero: to :five: = Vibration Speed\n:arrow_up: = Max air in\n:arrow_down: = Max air out\n:pause_button: = Nora rotate stop\n:arrows_counterclockwise: = Nora rotate anti-clockwise\n:arrows_clockwise: = Nora rotate clockwise'});
+
+			if(toy.length > 0  && toy[0] !="appoffline") {
+				if(type == "orgy" ){
+					lovenseEmbedThread.setDescription('**IMPORTANT IF YOU GET CONTROLLED:**```\nIf this is the first time you use this bot, follow the setup instructions that have been send to you via DM. \nAFTER that connect to the bot by reacting via ✅.\nClick ❌ to leave the session.\nClick ♻️ to reload the session / reactions.```\n\n**How the control works:**```\nUse only the blue reaction to vibe the toys of all connected user. The highest reaction count is the control level.```\n\nThis bot is brought to you by VibeMyToy [join here](https://discord.gg/vibemytoy)');
+				} else {
+					lovenseEmbedThread.setDescription('**IMPORTANT IF YOU GET CONTROLLED:**```\nClick ❌ to end the session.\nClick ♻️ to reload the session / reactions.```\n\n**How the control works:**```\nUse only the blue reaction to vibe the toys of all connected user. The highest reaction count is the control level.```\n\nThis bot is brought to you by VibeMyToy [join here](https://discord.gg/vibemytoy)');
+				}
+				lovenseEmbedThread.setDescription('**IMPORTANT IF YOU GET CONTROLLED:**```\nIf this is the first time you use this bot, follow the setup instructions that have been send to you via DM. \nAFTER that connect to the bot by reacting via ✅.\nClick ❌ to leave the session.\nClick ♻️ to reload the session / reactions.```\n\n**How the control works:**```\nUse only the blue reaction to vibe the toys of all connected user. The highest reaction count is the control level.```\n\nThis bot is brought to you by VibeMyToy [join here](https://discord.gg/vibemytoy)');
+
+				lovenseEmbed.addFields({name: 'User / Toys', value: `${interaction.member} / ${toy.join(', ')}`});
+			}else{
+				lovenseEmbed.addFields({name: 'User', value: `${interaction.member}`, inline: true});
+			}
+			
+			lovenseEmbedThread.setDescription('**IMPORTANT IF YOU GET CONTROLLED:**```\nIf this is the first time you use this bot, follow the setup instructions that have been send to you via DM. \nAFTER that connect to the bot by reacting via ✅\n\n```**How the control works:**```\nUse only the blue reaction to vibe the toys of all connected user. The highest reaction count is the control level.```\n\nThis bot is brought to you by VibeMyToy [join here](https://discord.gg/vibemytoy)');
+
+
+			//lovenseembed.addFields({name: '\u200B', '\u200B', true);
+			lovenseEmbed.addFields({name: 'Current Speed', value: `${lovenseConfig.toy_current_speed} / ${lovenseConfig.toy_max_level}`, inline: true});
+			lovenseEmbed.addFields({name: 'Current Rotation(Nora)', value: 'none', inline: true});
+			lovenseEmbed.addFields({name: 'Current AirPump(Max)', value: 'none', inline: true});
+			lovenseEmbed.addFields({name: 'Last Vote', value: 'none', inline: true});
+			lovenseEmbed.setTimestamp();
+			lovenseEmbed.setColor('#4caf50');
+			lovenseEmbed.setFooter({text: `Controling by reacting to owner's toy by using the reactions from 0 to ${lovenseConfig.toy_max_level}`, iconURL: interaction.user.displayAvatarURL})
+			//if(toy.length > 0  && toy[0] !="appoffline"){
+			//}
+		
+			var sessionMsg = "";
+			if (type == "private") {
+				sessionMsg = await interaction.client.users.resolve(controlee).send({embeds: [lovenseEmbed]}).then(sentMessage => interaction.client.lovense.panel = sentMessage);
+			}else{
+		sessionMsg = await interaction.channel.send({embeds: [lovenseEmbed]}).then(
+			//sentMessage => interaction.client.lovense.panel = sentMessage
+			);
+		//create thread here
+
+		const thread = await sessionMsg.startThread({
+			name: 'control-chat',
+			autoArchiveDuration: 60,
+			reason: 'Needed a separate thread for food',
+		});
+
+		await thread.send({embeds: [lovenseEmbedThread]}).then(
+			//sentMessage => interaction.client.lovense.panel = sentMessage
+		);
+		console.log(`Created thread: ${thread.name}`);
+			}
+
+			interaction.client.lovense.message_id = sessionMsg.id;
+		loginLovense(interaction.client, lovenseConfig, sessionMsg, interaction, orgy);
+
+
+
+
+		
+		//toy = await request.post(`https://apps.lovense.com/api/lan/command?token=${lovenseConfig.token}&uid=${uIDarray[0]}&command=GetToys`);
+		/*if(toy.length > 0 && toy[0] !="appoffline"){
+			if(type == "orgy" ){
+				await sessionMsg.react('✅');
+			} else {
+				await sessionMsg.react('❌');
+						//toy = toy.data[Object.keys(toy.data)[0]];
+						await sessionMsg.react('0️⃣').catch(err => { console.error('0 one of the emojis failed to react.')} );
+						await sessionMsg.react('1️⃣').catch(err => { console.error('1 one of the emojis failed to react.')} );
+						await sessionMsg.react('2️⃣').catch(err => { console.error('2 one of the emojis failed to react.')} );
+						await sessionMsg.react('3️⃣').catch(err => { console.error('3 one of the emojis failed to react.')} );
+						await sessionMsg.react('4️⃣').catch(err => { console.error('4 one of the emojis failed to react.')} );
+						await sessionMsg.react('5️⃣').catch(err => { console.error('5 one of the emojis failed to react.')} );
+						console.log(toy)
+
+						if (toy.includes("Max")) {
+							this.client.user.setActivity(`with MAX`); 
+							await sessionMsg.react('⬆');
+							await sessionMsg.react('⬇');
+						}
+						if (toy.includes("Nora")) {
+							this.client.user.setActivity(`with NORA`); 
+							await sessionMsg.react('⏸');
+							await sessionMsg.react('🔄');
+							await sessionMsg.react('🔃');
+						}
+
+			}
+		} else {*/
+			await sessionMsg.react('✅').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+			await sessionMsg.react('❌').catch(err => { console.error('❌ one of the emojis failed to react.')} );
+		//};
+		
+		
+
+		const filter = (reaction, user) => {
+			if(!reaction.emoji)
+				return false;
+			const e = reaction.emoji.name;
+			switch(e){
+				case '0️⃣': case '1️⃣': case '2️⃣': case '3️⃣': case '4️⃣': case '5️⃣': case '⏸': case '🔄': case '🔃': case '⬇': case '⬆': case '✅': case '❌': case '♻️': 
+					if(!user.bot)
+						return true;
+			}
+			return false;
+		}
+
+		const collector = sessionMsg.createReactionCollector(filter, {dispose: true});
+		//test
+
+		interaction.client.qonSessions.set(sessionMsg.id, {channelid : interaction.channel.id, curSpeed: 0, prevSpeed: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], rotACW: 0, rotCW: 0, rotStop: 0, airIn: 0, airOut: 0, update_active: false, users: [interaction.member.id], userreacted: [{userid: 0, reaction: 0}], orgy: orgy});
+		
+		collector.on('collect', async (reaction, user) => {
+
+			const emoji = reaction.emoji.name;
+			const embed = reaction.message.embeds[0];
+			let config = interaction.client.qonSessions.get(reaction.message.id)
+
+			switch(emoji){
+
+				case '✅': {
+					if(!config.users.includes(user.id) && config.orgy){
+						let toy = await LovenseConnect.sendToLovense(
+							user.id, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+						);
+					} else {
+						/*
+						let toy = await LovenseConnect.sendToLovense(
+							config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+						);*/
+					}
+
+
+					let toy = await GetConnectedToysLovense(user.id);
+					//toy = await request.post(`https://apps.lovense.com/api/lan/command?token=${lovenseConfig.token}&uid=${uIDarray[0]}&command=GetToys`);
+					if(toy.length > 0  && toy[0] !="appoffline"){
+						if(!config.users.includes(user.id) && config.orgy){
+							//LovenseConnect.loginLovense(this.client, { uid: user.id, token: lovenseConfig.token }, reaction.message, user.id);
+							config.users.push(user.id);
+							//config.users.push(user.id);
+							//lovenseembed.addFields({name: 'Users / Toys', `${msg.author} / ${toy.join(', ')}`, true);
+							embed.spliceFields(1, 1, {name: "User / Toys", value: config.users.map(u => `<@${u}> / ${toy.join(', ')}`).join('\n'), inline: true})
+							//break;
+							reaction.message.edit(embed);
+						} else {
+							//const reporteduserembed = message.embeds[0].fields[0];
+							//const reportedlinkembed = message.embeds[0].fields[1];
+						}
+						let clientqon = interaction.client.qonSessions;
+						stop = false; //for testing
+						testrun(reaction.message, config, clientqon);
+						//toy = toy.data[Object.keys(toy.data)[0]];
+						await sessionMsg.react('0️⃣').catch(err => { console.error('0 one of the emojis failed to react.')} );
+						await sessionMsg.react('1️⃣').catch(err => { console.error('1 one of the emojis failed to react.')} );
+						await sessionMsg.react('2️⃣').catch(err => { console.error('2 one of the emojis failed to react.')} );
+						await sessionMsg.react('3️⃣').catch(err => { console.error('3 one of the emojis failed to react.')} );
+						await sessionMsg.react('4️⃣').catch(err => { console.error('4 one of the emojis failed to react.')} );
+						await sessionMsg.react('5️⃣').catch(err => { console.error('5 one of the emojis failed to react.')} );
+						console.log(toy)
+
+						if(orgy == true || type == "group"){
+							await sessionMsg.react('⬆').catch(err => { console.error('⬆ one of the emojis failed to react.')} );
+							await sessionMsg.react('⬇').catch(err => { console.error('⬇ one of the emojis failed to react.')} );
+							await sessionMsg.react('⏸').catch(err => { console.error('⏸ one of the emojis failed to react.')} );
+							await sessionMsg.react('🔄').catch(err => { console.error('🔄 one of the emojis failed to react.')} );
+							await sessionMsg.react('🔃').catch(err => { console.error('🔃 one of the emojis failed to react.')} );
+
+						}else{
+
+						if (toy.includes("Max")) {
+							interaction.client.user.setActivity(`with MAX`); 
+							await sessionMsg.react('⬆').catch(err => { console.error('⬆ one of the emojis failed to react.')} );
+							await sessionMsg.react('⬇').catch(err => { console.error('⬇ one of the emojis failed to react.')} );
+						}
+						if (toy.includes("Nora")) {
+							interaction.client.user.setActivity(`with NORA`); 
+							await sessionMsg.react('⏸').catch(err => { console.error('⏸ one of the emojis failed to react.')} );
+							await sessionMsg.react('🔄').catch(err => { console.error('🔄 one of the emojis failed to react.')} );
+							await sessionMsg.react('🔃').catch(err => { console.error('🔃 one of the emojis failed to react.')} );
+						}
+
+							await reaction.users.remove(sessionMsg.author);
+						}
+					
+					} else {
+						if(type == "orgy" || type == "group"){
+							loginLovense(interaction.client, { uid: user.id, token: lovenseConfig.token }, reaction.message, interaction, true);
+							reaction.message.channel.send('Please follow the instructions you got via DM! Make sure that the Lovense Connect App is running and your toy is connected to it. Then react again to join the orgy').then();
+						}else{
+							if(!config.users.includes(user.id)){
+								reaction.message.channel.send(`<@${user.id}> This is not an orgy session, only the creator can join it. You can still vote to control.`).then();
+							}else{
+								if(toy[0] =="appoffline"){
+									reaction.message.channel.send(`<@${user.id}> The Lovense Remote App is not running. Please start the Lovense connect app, connect your toy and try again.\n(Sometimes the Lovense Connect app is bugged and needs a restart)`).then();
+								}else{
+									reaction.message.channel.send(`<@${user.id}> There is no toy connected to Lovense Connect, make sure that at least one toy is connected in the app and ✅ react again.\n(Sometimes the app is bugged and needs a restart)`).then();
+								}
+							}
+						}
+						return reaction.users.remove(user.id);
+					}
+					break;
+				}
+				case '❌':
+					stop = true;
+					if(config.orgy){
+						if(!config.users.includes(user.id))
+							return reaction.users.remove(user.id);
+
+						if(config.users.length == 1){
+							interaction.client.qonSessions.delete(reaction.message.id);
+							reaction.message.delete();
+							collector.stop();
+							LovenseConnect.sendToLovense([user.id], 0, 0, 'down', 0, 0, 1, 0, 0);
+							return;
+						}
+
+						config.users.splice(config.users.indexOf(user.id), 1);
+						LovenseConnect.sendToLovense([user.id], 0, 0, 'down', 0, 0, 1, 0, 0);
+						embed.spliceFields(1, 1, {name: "User / Toys", value: config.users.map(u => `<@${u}>`).join('\n'), inline: true})
+						reaction.message.edit(embed);
+					}else{
+						if(user.id != config.users[0])
+							return reaction.message.channel.send('You are not the creator of this session').then(msg => msg.delete({timeout: 5000}));
+
+						LovenseConnect.sendToLovense(config.users, 0, 0, 'down', 0, 0, 1, 0, 0);
+						interaction.client.qonSessions.delete(reaction.message.id);
+						reaction.message.delete();
+						collector.stop();
+						return;
+					}
+					break;
+
+				case '0️⃣':
+				case '1️⃣':
+				case '2️⃣':
+				case '3️⃣':
+				case '4️⃣':
+				case '5️⃣':
+					if(config.userreacted.some(userreacted => userreacted.userid == user.id)){
+						//reaction.users.remove(user.id).catch(err => { console.log('Failed to remove reaction')} );
+					}else{
+						// Push to a Multidimensional Array
+						if (user.bot == false){
+							config.userreacted.push({userid: user.id, reaction: parseInt(reaction.emoji.name.charAt(0))});
+							//config.userreacted.userid.push(parseInt(reaction.emoji.name.charAt(0)));
+							
+
+							let highestEmojiSpeed = reaction.message.reactions.cache.map(r => {return {name: r.emoji.name, count: r.count}})
+								.sort((a, b) => b.count - a.count)
+								.filter(r => ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'].includes(r.name))[0]
+							
+							let speed = highestEmojiSpeed ? parseInt(highestEmojiSpeed.name.charAt(0)) : undefined;
+							//reaction.remove(user.id);
+							//reaction.users.remove(user.id);  && config.prevSpeed != parseInt(speed)
+							if(speed != undefined){//if is number and between 0 and 5 including
+								speed = parseInt(speed);
+								//
+
+								config.prevSpeed.shift();
+
+								config.prevSpeed.push(config.curSpeed);
+								config.curSpeed = speed
+								
+								
+								setTimeout(() => { 
+									if(config.update_active == false) {
+										config.update_active = true
+										interaction.client.qonSessions.set(reaction.message.id, config);
+										embed.spliceFields(3, 1, {name: 'Current Speed', value: `${config.curSpeed}/5`, inline: true});
+										//reaction.message.edit(embed);		
+
+										LovenseConnect.sendToLovense(
+											config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+										);
+										
+										//embed.setImage('https://cdn.discordapp.com/attachments/790173243364737024/790228781704282132/file.jpg')
+
+										//embed.spliceFields(6, 1, {name: 'Last Vote', value: `<@${config.userreacted[1].userid}> ${config.userreacted[1].reaction}`, inline: true});
+										reaction.message.edit(embed);
+										reaction.users.remove(user.id);
+										config.userreacted = config.userreacted.filter(item => item.userid !== reaction.user.id);
+										config.update_active = false;
+										return interaction.client.qonSessions.set(reaction.message.id, config);
+
+										
+									}
+								
+								}, 5000);
+								
+
+
+								return interaction.client.qonSessions.set(reaction.message.id, config);
+							}
+						}
+					}
+
+					break;
+				
+				case '⏸':
+				case '🔃':
+				case '🔄': {
+					let highestEmojiRotate = reaction.message.reactions.cache.map(r => {return {name: r.emoji.name, count: r.count}})
+						.sort((a, b) => b.count - a.count)
+						.filter(r => ['⏸', '🔃', '🔄'].includes(r.name))[0]		
+					let rotate = highestEmojiRotate ? highestEmojiRotate.name : undefined;
+					if(rotate != undefined){
+						switch(rotate){
+							case '⏸':
+								embed.spliceFields(5, 1, {name: 'Current Rotation(Nora)', value: 'none', inline: true});
+								config.rotStop = 1;
+								LovenseConnect.sendToLovense(
+									config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+								);
+								break
+
+							case '🔄':
+								embed.spliceFields(5, 1, {name: 'Rotate', value: 'Anticlockwise', inline: true});
+								config.rotACW = 1;
+								LovenseConnect.sendToLovense(
+									config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+								);
+								break;
+
+							case '🔃':
+								embed.spliceFields(5, 1, {name: 'Rotate', value: 'Clockwise', inline: true});
+								config.rotCW = 1;
+								LovenseConnect.sendToLovense(
+									config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+								);
+								break;
+						}
+					}
+					reaction.message.edit(embed);
+					break;
+				}
+				case '⬇':
+				case '⬆': {
+					let highestEmojiAir = reaction.message.reactions.cache.map(r => {return {name: r.emoji.name, count: r.count}})
+						.sort((a, b) => b.count - a.count)
+						.filter(r => ['⬇', '⬆'].includes(r.name))[0]
+					let air = highestEmojiAir ? highestEmojiAir.name : undefined;
+					if(air != undefined){
+						switch(air){
+							case '⬇':
+								embed.spliceFields(4, 1, {name: 'Current AirPump(Max)', value: 'Out', inline: true});
+								config.airOut = 1;
+								config.airIn = 0;
+								LovenseConnect.sendToLovense(
+									config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+								);
+								break;
+
+							case '⬆':
+								embed.spliceFields(4, 1, {name: 'Current AirPump(Max)', value: 'In', inline: true});
+								config.airIn = 1;
+								config.airOut = 0;
+								LovenseConnect.sendToLovense(
+									config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+								);
+								break;
+
+						}
+						reaction.message.edit(embed);
+					}
+					break;
+				}
+
+
+				case '♻️':
+					if(config.orgy){
+						if(!config.users.includes(user.id)){
+							reaction.users.remove(user.id);
+							return reaction.message.channel.send('You are not the creator of this session').then(msg => msg.delete({timeout: 5000}));
+						}else{
+
+
+							
+							let msg3 = await interaction.channel.send('Do you really want to reset this session?');
+							msg3.react('✅').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+							msg3.react('❌').catch(err => { console.error('❌ one of the emojis failed to react.')} );
+				
+							const filter = (reaction, user) => user.id == interaction.member.id && (reaction.emoji.name == '✅' || reaction.emoji.name == '❌');
+							let reactions = await msg3.awaitReactions({filter, max: 1});
+							switch(reactions.first().emoji.name){
+								case '✅':
+									msg3.delete();
+									LovenseConnect.sendToLovense(config.users, 0, 0, 'down', 0, 0, 1, 0, 0);
+									reaction.message.channel.send('Reaction reset started').then(msg => msg.delete({timeout: 7000}));
+									reaction.message.reactions.cache.get('0️⃣').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('1️⃣').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('2️⃣').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('3️⃣').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('4️⃣').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('5️⃣').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('⬆').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('⬇').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('⏸').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('🔄').remove().catch(error => console.error('Failed to remove reactions: ', error));
+									reaction.message.reactions.cache.get('🔃').remove().catch(error => console.error('Failed to remove reactions: ', error));
+		
+		
+									await sessionMsg.react('0️⃣').catch(err => { console.error('0 one of the emojis failed to react.')} );
+									await sessionMsg.react('1️⃣').catch(err => { console.error('1 one of the emojis failed to react.')} );
+									await sessionMsg.react('2️⃣').catch(err => { console.error('2 one of the emojis failed to react.')} );
+									await sessionMsg.react('3️⃣').catch(err => { console.error('3 one of the emojis failed to react.')} );
+									await sessionMsg.react('4️⃣').catch(err => { console.error('4 one of the emojis failed to react.')} );
+									await sessionMsg.react('5️⃣').catch(err => { console.error('5 one of the emojis failed to react.')} );
+									await sessionMsg.react('⬆').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+									await sessionMsg.react('⬇').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+									await sessionMsg.react('⏸').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+									await sessionMsg.react('🔄').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+									await sessionMsg.react('🔃').catch(err => { console.error('✅ one of the emojis failed to react.')} );
+									return interaction.channel.send('Session reset done, get the orgy started again').then(msg => msg.delete({timeout: 5000}));
+									//break;
+				
+								case '❌':
+									return interaction.channel.send('Request canceled').then(msg => msg.delete({timeout: 5000}));
+									//break;
+				
+							}
+				
+						}
+						//LovenseConnect.sendToLovense([user.id], 0, 0, 'down', 0, 0, 1, 0, 0);
+					}
+					interaction.client.qonSessions.set(reaction.message.id, config);
+			}
+			
+			//if no new reaction within 5 seconds, load same graph
+			//for 
+
+			//end for
+
+		});
+
+		collector.on('remove', (reaction, user) => {
+			const emoji = reaction.emoji.name;
+			const embed = reaction.message.embeds[0];
+			let config = interaction.client.qonSessions.get(reaction.message.id)
+		
+			let highestEmojiSpeed = reaction.message.reactions.cache.map(r => {return {name: r.emoji.name, count: r.count}})
+				.sort((a, b) => b.count - a.count)
+				.filter(r => ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'].includes(r.name))[0]
+			
+			let speed = highestEmojiSpeed ? parseInt(highestEmojiSpeed.name.charAt(0)) : undefined;
+			/*
+			if(speed != undefined && config.prevSpeed != speed){
+				config.curSpeed = speed;
+				config.prevSpeed = config.curSpeed
+				setTimeout(() => { 
+					if(config.update_active == false) {
+						config.update_active = true
+						this.client.qonSessions.set(reaction.message.id, config);
+						embed.spliceFields(3, 1, {name: 'Current Speed', value: `${config.curSpeed}/5`, inline: true});
+						reaction.message.edit(embed);
+
+						LovenseConnect.sendToLovense(
+							config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+						);
+						config.update_active = false
+						this.client.qonSessions.set(reaction.message.id, config);
+					}}, 1000);
+				return this.client.qonSessions.set(reaction.message.id, config);
+			}
+			*/
+
+
+			let highestEmojiRotate = reaction.message.reactions.cache.map(r => {return {name: r.emoji.name, count: r.count}})
+				.sort((a, b) => b.count - a.count)
+				.filter(r => ['⏸', '🔃', '🔄'].includes(r.name))[0]		
+
+			let rotate = highestEmojiRotate ? highestEmojiRotate.name : undefined;
+			if(rotate != undefined){
+				switch(rotate){
+					case '⏸':
+						embed.spliceFields(5, 1, {name: 'Rotate', value: 'none', inline: true});
+						config.rotStop = 1;
+						LovenseConnect.sendToLovense(
+							config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+						);
+						break
+
+					case '🔄':
+						embed.spliceFields(5, 1, {name: 'Rotate', value: 'Anticlockwise', inline: true});
+						config.rotACW = 1;
+						LovenseConnect.sendToLovense(
+							config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+						);
+						break;
+
+					case '🔃':
+						embed.spliceFields(5, 1, {name: 'Rotate', value: 'Clockwise', inline: true});
+						config.rotCW = 1;
+						LovenseConnect.sendToLovense(
+							config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+						);
+						break;
+				}
+			}
+
+
+
+			let highestEmojiAir = reaction.message.reactions.cache.map(r => {return {name: r.emoji.name, count: r.count}})
+				.sort((a, b) => b.count - a.count)
+				.filter(r => ['⬇', '⬆'].includes(r.name))[0]
+
+			let air = highestEmojiAir ? highestEmojiAir.name : undefined;
+			if(air != undefined){
+				switch(air){
+					case '⬇':
+						embed.spliceFields(4, 1, {name: 'Air', value: 'Out', inline: true});
+						config.airOut = 1;
+						config.airIn = 0;
+						LovenseConnect.sendToLovense(
+							config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+						);
+						break;
+
+					case '⬆':
+						embed.spliceFields(4, 1, {name: 'Air', value: 'In', inline: true});
+						config.airIn = 1;
+						config.airOut = 0;
+						LovenseConnect.sendToLovense(
+							config.users, config.curSpeed, config.prevSpeed, 'down', config.rotACW, config.rotCW, config.rotStop, config.airIn, config.airOut
+						);
+						break;
+
+				}
+			}
+			reaction.message.edit(embed);
+			interaction.client.qonSessions.set(reaction.message.id, config);
+		});
+
+		collector.on('dispose', reaction => interaction.channel.send(`Disposed ${reaction.emoji.name}, total is ${collector.total}.`));
+		collector.on('end', collected => {
+			//this.client.logger.info(`Collected ${collected.size} items`);
+		});
+
+		/// END OF Command
+	}
+};

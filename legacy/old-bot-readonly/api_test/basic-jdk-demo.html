@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.6.0/build/styles/default.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.6.0/build/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.6.0/build/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://api.lovense.com/basic-api/static/js/core.min.js"></script>
+    <style>
+      .container {
+        width: 900px;
+        margin: 0 auto;
+      }
+      fieldset {
+        margin-bottom: 20px;
+      }
+      i {
+        display: block;
+        font-size: 14px;
+        color: #666;
+        margin-bottom: -10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="container">
+        <h1>Basic JDK Demo</h1>
+        <fieldset>
+          <legend>Step 1: Application for authorization token</legend>
+          <p>
+            <input type="text" v-model="token" placeholder="developer token" />
+            <input type="text" v-model="uid" placeholder="user ID" />
+            <button @click="getAuthToken">Get AuthToken</button>
+            <span v-if="authToken">✔️</span>
+          </p>
+          <p>
+            <b>Warning:</b>
+            ⚠️ For security reasons, the developer token should be always used
+            on the server side. You should never use it in your JS code from the
+            client side.
+          </p>
+          <p class="result">
+            <b>AuthToken: 👉</b>
+            {{ authToken }}
+          </p>
+          <div>
+            <i>Code Example:</i>
+            <pre><code class="language-javascript">
+const { data: resData } = await axios.post(
+  "https://api.lovense.com/api/basicApi/getToken",
+  {
+    token: “{{token}}”,
+    uid: “{{uid}}”,
+  }
+)
+if (resData.code === 0) {
+  this.authToken = resData.data && resData.data.authToken
+} else {
+  throw new Error(resData.message)
+}
+            </code></pre>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Step 2: Initialize</legend>
+          <p>
+            <input type="text" v-model="platform" placeholder="platform" />
+            <input type="text" v-model="uid" placeholder="user ID" />
+            <input type="text" v-model="authToken" placeholder="authToken" />
+            <button @click="initialize" :disabled="initStatus">
+              Initialize
+            </button>
+            <span v-if="readyStatus">✔️</span>
+          </p>
+          <div>
+            <i>Code Example:</i>
+            <pre><code class="language-javascript">
+              const basicJdkInstance = new LovenseBasicJdk({
+                platform: "{{ platform }}",
+                authToken: "{{ this.authToken }}",
+                uid: "{{ this.uid }}",
+                debug: true
+              })
+              basicJdkInstance.on("ready", (instance) => {
+                this.readyStatus = true
+              })
+            </code></pre>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Step 3: Get QR code</legend>
+          <p>
+            <button @click="getQrCode">Get QR code</button>
+            <span v-if="qrcode">✔️</span>
+          </p>
+          <p>
+            <img :src="qrcode" v-if="qrcode" alt="" />
+          </p>
+          <div>
+            <i>Code Example:</i>
+            <pre><code class="language-javascript">
+const codeRes = await this.basicJdkInstance.getQrcode()
+this.qrcode = codeRes.qrcodeUrl
+            </code></pre>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Step 4: Control toys</legend>
+          <p>
+            <span v-if="connected">Connected ✔️</span>
+            <span v-else>DisConnected</span>
+          </p>
+          <div v-if="deviceInfo.domain" style="display: flex">
+            <div style="flex: 1; padding-right: 20px">
+              <h4>Device 👇</h4>
+              <p>
+                <b>domain:</b>
+                {{ `https://${deviceInfo.domain}:${deviceInfo.httpsPort}` }}
+              </p>
+              <p>
+                <b>App:</b>
+                {{ `${deviceInfo.appType} - ${deviceInfo.appVersion}` }}
+              </p>
+              <p>
+                <b>platform:</b>
+                {{ deviceInfo.platform }}
+              </p>
+            </div>
+            <div style="flex: 1">
+              <h4>Toys 👇</h4>
+              <p v-for="item in toyList" :key="item.id">
+                <b>{{item.name}}</b>
+                <input
+                  type="range"
+                  min="0"
+                  max="20"
+                  value="0"
+                  :disabled="!item.connected"
+                  @change="sendCommand(item.id, $event)"
+                />
+              </p>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </div>
+
+    <script>
+      hljs.highlightAll()
+      const vm = new Vue({
+        el: '#app',
+        data: {
+          platform: '',
+          token: '',
+          uid: '',
+          authToken: '',
+          basicJdkInstance: null,
+          readyStatus: false,
+          initStatus: false,
+          connected: false,
+          qrcode: '',
+          deviceInfo: {},
+          toyList: [],
+        },
+        methods: {
+          async sendCommand(id, e) {
+            try {
+              await this.basicJdkInstance.sendToyCommand({
+                toyId: id,
+                vibrate: e.target.value,
+              })
+            } catch (e) {
+              alert(e.message)
+            }
+          },
+          async getAuthToken() {
+            try {
+              if (!this.token || !this.uid) {
+                throw new Error('missing parameter')
+              }
+              const { data: resData } = await axios.post(
+                'https://api.lovense.com/api/basicApi/getToken',
+                {
+                  token: this.token,
+                  uid: this.uid,
+                }
+              )
+              if (resData.code === 0) {
+                this.authToken = resData.data && resData.data.authToken
+              } else {
+                throw new Error(resData.message)
+              }
+            } catch (e) {
+              alert(e.message)
+            }
+          },
+          async getQrCode() {
+            try {
+              if (!this.readyStatus) {
+                throw new Error('Invalid initialization')
+              }
+              const codeRes = await this.basicJdkInstance.getQrcode()
+              this.qrcode = codeRes.qrcodeUrl
+            } catch (e) {
+              alert(e.message)
+            }
+          },
+          initialize() {
+            try {
+              this.initStatus = true
+              this.initTimeout = setTimeout(() => {
+                this.initStatus = false
+              }, 3000)
+              if (this.basicJdkInstance) {
+                this.basicJdkInstance.destroy()
+                this.basicJdkInstance = null
+                this.readyStatus = false
+                this.connected = false
+              }
+              this.basicJdkInstance = new LovenseBasicJdk({
+                platform: this.platform,
+                authToken: this.authToken,
+                uid: this.uid,
+                debug: true,
+              })
+              this.basicJdkInstance.on('ready', (instance) => {
+                this.readyStatus = true
+                this.initStatus = false
+              })
+              this.basicJdkInstance.on('toyInfoChange', (data) => {
+                this.toyList = data
+              })
+              this.basicJdkInstance.on('deviceInfoChange', (data) => {
+                this.deviceInfo = data
+              })
+              this.basicJdkInstance.on('appStatusChange', (data) => {
+                this.connected = data
+              })
+            } catch (e) {
+              alert(e.message)
+            }
+          },
+        },
+      })
+    </script>
+  </body>
+</html>

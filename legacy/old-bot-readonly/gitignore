@@ -1,0 +1,5 @@
+.env
+.env_productive
+node_modules/**
+logs/
+*.log

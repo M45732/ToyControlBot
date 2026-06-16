@@ -1,0 +1,21 @@
+---
+token2 : 'c911lt9Q5Eehe3XfAwLnafzBa+/20tXpHJCfC0NDhqpijjpTQjtrqAUZrUbqM3YA'
+token : '3EurjDOtf8BS+5Vgu5+5A766/vAeeL+nWSU9tAZDXvHUgyiOSYLzfPY1UhH+14k/'
+uid : "ShouldUseUID"
+messageid : "messageID"
+channelid : "channelID"
+playTypes: { 'maxLevel': 0,'lastReaction': 1 }
+toy_speed : [0,0,0,0,0,0]
+toy_current_speed : 0
+toy_default_level : 0
+toy_previous_speed : 0
+toy_max_level : 5
+toy_RotateAntiClockwise : 0
+toy_RotateClockwise : 0
+toy_RotateStop : 0
+toy_AirIn : 0
+toy_AirOut : 0
+toy_AirAuto : 0
+toy_Preset : 0
+update_active : false
+reactionNumbers: ["\u0030\u20E3","\u0031\u20E3","\u0032\u20E3","\u0033\u20E3","\u0034\u20E3","\u0035\u20E3", "\u0036\u20E3","\u0037\u20E3","\u0038\u20E3","\u0039\u20E3"]

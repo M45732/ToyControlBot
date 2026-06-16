@@ -1,0 +1,12 @@
+
+
+//GET https://hp-api.onrender.com/api/characters/house/gryfiindor HTTP/1.1
+
+//POST https://api.lovense.com/api/basicApi/getToken?token=3EurjDOtf8BS+5Vgu5+5A766/vAeeL+nWSU9tAZDXvHUgyiOSYLzfPY1UhH+14k/&uid=244454602517381120
+
+//PUT https://api.lovense.com/api/basicApi/getToken?token=3EurjDOtf8BS+5Vgu5+5A766/vAeeL+nWSU9tAZDXvHUgyiOSYLzfPY1UhH+14k/&uid=244454602517381120&uname=Amon
+
+
+//POST https://api.lovense.com/api/lan/getQrCode?token=3EurjDOtf8BS+5Vgu5+5A766/vAeeL+nWSU9tAZDXvHUgyiOSYLzfPY1UhH+14k/&uid=244454602517381120
+
+POST https://api.lovense-api.com/api/lan/getQrCode?token=3EurjDOtf8BS+5Vgu5+5A766/vAeeL+nWSU9tAZDXvHUgyiOSYLzfPY1UhH+14k/&uid=244454602517381120&v=2

@@ -1,0 +1,43 @@
+{
+  "name": "toycontrolbot",
+  "version": "14.5.10",
+  "description": "Toy Control Bot",
+  "main": "TCB.js",
+  "scripts": {
+    "test": "npm run lint",
+    "lint": "eslint . -c eslint.config.mjs",
+    "start": "node TCB.js",
+    "start:dev": "nodemon VMT.js",
+    "build:docker": "docker build --tag toycontrolbot ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:VibeMyToy/ToyControlBot.git"
+  },
+  "author": "Amon",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "ascii-table": "^0.0.9",
+    "canvas": "^2.11.2",
+    "canvas-constructor": "^7.0.2",
+    "chart.js": "^3.9.1",
+    "chartjs-node-canvas": "^4.1.6",
+    "chartjs-plugin-datalabels": "^2.2.0",
+    "common-tags": "^1.8.2",
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "js-yaml": "^4.1.0",
+    "moment": "^2.30.1",
+    "mysql2": "^3.12.0",
+    "nodemon": "^3.1.9",
+    "pretty-ms": "^7.0.1",
+    "winston": "^3.17.0",
+    "winston3-discord": "^1.1.1"
+  },
+  "devDependencies": {
+    "eslint": "^9.18.0"
+  },
+  "engines": {
+    "node": "20.18.1"
+  }
+}
