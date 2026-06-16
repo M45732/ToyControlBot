@@ -86,7 +86,7 @@ function loadConfig(): AppConfig {
     },
     economy: {
       verifiedRoleId: getOptionalEnv("ROLE_VERIFIED_ID"),
-      patronRoleId: getOptionalEnv("ROLE_PATRON_ID"),
+      patronRoleId: getOptionalEnv("ROLE_PATRON"),
     },
   };
 }

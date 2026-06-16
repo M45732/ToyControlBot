@@ -35,6 +35,7 @@ bot should be cleaner, safer, and easier to maintain.
 | `ping` / `token-balance` permissions | Gated on `BanMembers` (unusual for read-only utility) | Gate removed; everyone can check their own balance/history | The legacy gate looked accidental, not intentional |
 | `daily` verified-role gate | Hardcoded check against `ROLE_VERIFIED_ID` env var; failed loudly if unset | Gate is skipped entirely when `ROLE_VERIFIED_ID` is not configured | Avoids a hard dependency on a specific guild's role setup during early development |
 | `token-toplist` pagination | Parsed the page number out of the embed footer text on each button click | Page number is encoded directly in the button `customId` (`economy:toplist:<page>`) | Simpler, doesn't depend on embed text formatting |
+| `daily` claim concurrency | No protection against concurrent claims (read-then-write race in app code) | Cooldown check + redeem update + balance/history write happen as one atomic claim inside a transaction (conditional `updateMany`s plus a unique-constraint guard on first claim) | Caught in review: two simultaneous `/daily` invocations could otherwise both pass the cooldown check and mint duplicate tokens |
 | Daily token streak | Column existed (`streakDay`) but was never actually incremented in legacy code | Streak increments when the previous claim was within 48h of now, otherwise resets to 1 | Implements the documented intent; not yet surfaced in the daily embed |
 
 > Add a row here whenever rebuilt behavior differs from the legacy bot.
