@@ -33,12 +33,21 @@ committed in the legacy config).
 
 The foundation is in place under `apps/bot/src/`:
 
-- `index.ts` — entrypoint: builds the client, registers events, logs in.
+- `index.ts` — entrypoint: builds the client, registers events, logs in,
+  installs shutdown handlers that disconnect the database cleanly.
 - `config/` — typed, validated, env-based configuration.
 - `lib/` — `env`, `logger` (pino), `client` (intents), `errors`.
-- `events/` — typed event registry with the `ready` handler.
-- `commands/` — typed slash-command registry (populated per feature).
-- `features/`, `services/` — empty, filled as features are migrated.
+- `events/` — typed event registry with `ready` and `interactionCreate`
+  (dispatches slash commands and button interactions).
+- `commands/` — typed slash-command registry, populated per feature.
+- `buttons/` — typed button-handler registry, mirrors the command registry
+  for interactive components (e.g. toplist pagination).
+- `services/` — `database.service.ts` (Prisma client) and
+  `permission.service.ts` (guild-context + role checks).
+- `features/economy/` — the first migrated feature: daily token, balance,
+  toplist.
+- `scripts/deploy-commands.ts` — registers slash commands with Discord
+  (`npm run deploy-commands`), replacing the legacy `!deploy-*` chat commands.
 
 ## Design goals
 
