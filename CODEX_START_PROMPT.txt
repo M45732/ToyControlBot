@@ -1,0 +1,13 @@
+Set up the initial project structure for this Discord bot rewrite.
+
+Follow AGENTS.md strictly.
+
+Create the folder structure described in README.md and docs/architecture.md.
+
+Do not modify anything in legacy/old-bot-readonly.
+
+Create a minimal working Discord bot entrypoint in apps/bot/src/index.ts using TypeScript and discord.js.
+
+Add config loading from environment variables, a simple logger, and a ready event log.
+
+Keep the architecture modular and prepare folders for commands, events, features, services, lib, and config.

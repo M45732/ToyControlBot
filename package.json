@@ -1,0 +1,31 @@
+{
+  "name": "discord-bot-v2",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clean rewrite of an existing Discord bot.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch apps/bot/src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/apps/bot/src/index.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0",
+    "discord.js": "^14.0.0",
+    "dotenv": "^16.0.0",
+    "pino": "^9.0.0",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "prisma": "^6.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
