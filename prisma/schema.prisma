@@ -53,3 +53,45 @@ model DailyToken {
 
   @@unique([guildId, userId])
 }
+
+/// An active reaction-vote toy control session (gangbang or orgy mode).
+model ToyControl {
+  id          String   @id @default(cuid())
+  guildId     String
+  channelId   String
+  messageId   String   @unique
+  ownerId     String
+  sessionMode String   // "gangbang" | "orgy"
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  participants ToyControlUser[]
+
+  @@index([guildId, active])
+}
+
+/// A participant in a ToyControl session.
+model ToyControlUser {
+  id        String   @id @default(cuid())
+  sessionId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  session ToyControl @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+}
+
+/// A tip transaction recorded during a toy-control tip session.
+model TipHistory {
+  id         String   @id @default(cuid())
+  guildId    String
+  messageId  String
+  senderId   String
+  receiverId String
+  amount     Int
+  message    String?
+  createdAt  DateTime @default(now())
+
+  @@index([guildId, messageId])
+}

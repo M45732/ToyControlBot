@@ -3,8 +3,14 @@ import type {
   SlashCommandBuilder,
 } from "discord.js";
 
+import { channelCommands } from "../features/channel/channel.commands.js";
+import { dashboardCommands } from "../features/dashboards/dashboards.commands.js";
 import { economyCommands } from "../features/economy/economy.commands.js";
 import { lovenseCommands } from "../features/lovense/lovense.commands.js";
+import { sessionCommands } from "../features/lovense/session.commands.js";
+import { ownerCommands } from "../features/owner/owner.commands.js";
+import { tippingCommands } from "../features/tipping/tipping.commands.js";
+import { utilityCommands } from "../features/utility/utility.commands.js";
 
 /**
  * The contract every slash command module must satisfy.
@@ -23,7 +29,16 @@ export interface SlashCommand {
  * Commands are added here as features are migrated from the legacy bot. See
  * `docs/feature-map.md` for the migration roadmap.
  */
-export const commands: SlashCommand[] = [...economyCommands, ...lovenseCommands];
+export const commands: SlashCommand[] = [
+  ...economyCommands,
+  ...lovenseCommands,
+  ...sessionCommands,
+  ...tippingCommands,
+  ...channelCommands,
+  ...dashboardCommands,
+  ...utilityCommands,
+  ...ownerCommands,
+];
 
 /**
  * Look up a registered command by its slash-command name.

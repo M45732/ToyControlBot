@@ -1,6 +1,7 @@
 import { Events } from "discord.js";
 
 import { createLogger } from "../lib/logger.js";
+import { restoreActiveSessions } from "../features/lovense/session.service.js";
 import { defineEvent } from "./types.js";
 
 const log = createLogger("ready");
@@ -11,7 +12,7 @@ const log = createLogger("ready");
 export const readyEvent = defineEvent({
   name: Events.ClientReady,
   once: true,
-  execute(client) {
+  async execute(client) {
     log.info(
       {
         user: client.user.tag,
@@ -19,6 +20,10 @@ export const readyEvent = defineEvent({
         guilds: client.guilds.cache.size,
       },
       "Bot is online and ready",
+    );
+
+    await restoreActiveSessions(client).catch((err: unknown) =>
+      log.error({ err }, "Failed to restore active sessions"),
     );
   },
 });

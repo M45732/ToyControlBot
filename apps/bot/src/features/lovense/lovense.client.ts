@@ -75,3 +75,20 @@ export function getToys(
     command: "GetToys",
   });
 }
+
+/**
+ * Send a vibration command to a user's connected toys.
+ *
+ * @param uid   Discord user ID
+ * @param level Vibration level 0–20 (0 = off, 20 = max)
+ */
+export function sendVibrate(
+  uid: string,
+  level: number,
+): Promise<LovenseApiResponse<unknown>> {
+  return callLovenseApi<unknown>("/api/lan/command", {
+    uid,
+    command: "Vibrate",
+    v: String(Math.round(Math.max(0, Math.min(20, level)))),
+  });
+}

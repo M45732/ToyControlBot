@@ -2,6 +2,7 @@ import type { Client } from "discord.js";
 
 import { createLogger } from "../lib/logger.js";
 import { interactionCreateEvent } from "./interactionCreate.event.js";
+import { messageCreateEvent } from "./messageCreate.event.js";
 import { readyEvent } from "./ready.event.js";
 import type { BotEvent } from "./types.js";
 
@@ -12,7 +13,7 @@ const log = createLogger("events");
  *
  * Add new handlers here as features are migrated.
  */
-const events: BotEvent[] = [readyEvent, interactionCreateEvent];
+const events: BotEvent[] = [readyEvent, interactionCreateEvent, messageCreateEvent];
 
 /**
  * Wire all registered event handlers onto the Discord client.
