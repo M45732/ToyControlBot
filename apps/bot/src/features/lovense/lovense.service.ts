@@ -1,6 +1,12 @@
 import { UserFacingError } from "../../lib/errors.js";
+import { createLogger } from "../../lib/logger.js";
 import { getToys, requestQrCode } from "./lovense.client.js";
 import type { LovenseQrCodeData } from "./lovense.types.js";
+
+const log = createLogger("lovense");
+
+/** API code returned when the Lovense Connect app isn't running on the user's device. */
+const APP_OFFLINE_CODE = 407;
 
 export interface ConnectedToy {
   readonly name: string;
@@ -40,11 +46,20 @@ export async function getConnectedToys(
 ): Promise<ToyStatus> {
   const response = await getToys(discordUserId);
   if (!response.result) {
-    return { state: "app-offline" };
+    if (response.code === APP_OFFLINE_CODE) {
+      return { state: "app-offline" };
+    }
+    log.error(
+      { code: response.code, message: response.message },
+      "Lovense GetToys request failed",
+    );
+    throw new UserFacingError(
+      "Couldn't check your toy status right now. Please try again later.",
+    );
   }
 
   const toys: ConnectedToy[] = Object.values(response.data)
-    .filter((toy) => toy.status === 1)
+    .filter((toy) => Number(toy.status) === 1)
     .map((toy) => ({
       name: toy.nickName || toy.name,
       // The API reports `-1` for toys that don't expose a battery level.

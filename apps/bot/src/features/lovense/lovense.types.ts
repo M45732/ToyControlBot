@@ -32,8 +32,8 @@ export interface LovenseToy {
   readonly id: string;
   readonly name: string;
   readonly nickName: string;
-  /** `1` when the toy is connected and ready to receive commands. */
-  readonly status: number;
+  /** `1` (sometimes returned as the string `"1"`) when the toy is connected and ready to receive commands. */
+  readonly status: number | string;
   /** Battery percentage, or `-1` for toys that don't report one. */
   readonly battery: number;
   readonly version: string;
