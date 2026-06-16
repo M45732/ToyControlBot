@@ -49,7 +49,7 @@ Suggested build order. Later phases depend on earlier ones.
    Lovense control sessions)*
 3. **Token economy** — daily token, balance, toplist (no toys required; good
    first vertical slice through the new architecture). *(done)*
-4. **Lovense core** — config-driven Lovense client/service, QR pairing.
+4. **Lovense core** — config-driven Lovense client/service, QR pairing. *(done)*
 5. **Control sessions** — reaction-vote sessions (gangbang/orgy), session
    persistence and restore-on-startup.
 6. **Tipping** — tip command + tip-mode sessions wired to economy + Lovense.
@@ -88,8 +88,9 @@ Suggested build order. Later phases depend on earlier ones.
 
 | Old Feature | Old Location | Status | New Location | Notes |
 |---|---|---|---|---|
-| Lovense API client | `structures/commands/LovenseConnect.js`, `config/lovenseOptions.yml` | Planned | `apps/bot/src/features/lovense/lovense.client.ts` | QR code, command send, speed ramping. **API tokens MUST come from env, never YAML** |
-| QR pairing | `structures/commands/toyControl.js` (`Lovense_create_qr_embed`) | Planned | `apps/bot/src/features/lovense/` | Generate + show pairing QR |
+| Lovense API client | `structures/commands/LovenseConnect.js`, `config/lovenseOptions.yml` | Migrated | `apps/bot/src/features/lovense/lovense.client.ts` | `requestQrCode` + `getToys` against the typed API. Token loaded from `LOVENSE_API_TOKEN` env var, never YAML. Vibration command sending (`LovenseConnect_send`) is deferred to the control-sessions phase, which needs it |
+| QR pairing | `structures/commands/toyControl.js` (`Lovense_create_qr_embed`) | Migrated | `apps/bot/src/features/lovense/` | `/toy-connect` slash command shows the pairing QR + code as an ephemeral embed |
+| Toy connection status | `structures/commands/LovenseConnect.js` (`LovenseConnect_GetConnectedToys`) | Migrated | `apps/bot/src/features/lovense/` | `/toy-status` slash command; new feature (legacy only used this internally before starting a session) |
 | Control sessions (reaction vote) | `structures/commands/toyControl.js` | Planned | `apps/bot/src/features/lovense/` | gangbang (solo), orgy (group); emoji 1–5 votes drive intensity. Tables `toycontrol`, `toycontrol_user` |
 | Session restore on startup | `events/ready/ready.js` | Planned | `apps/bot/src/features/lovense/` | Reload active sessions, clean orphaned ones |
 | Vibration patterns | `assets/patterns/**` | Not started | TBD | Pattern files exist but were never parsed in legacy. Decide whether to implement |

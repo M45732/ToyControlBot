@@ -32,6 +32,12 @@ export interface DatabaseConfig {
   readonly url?: string;
 }
 
+export interface LovenseConfig {
+  /** Lovense developer API token. Toy control is disabled until this is set. */
+  readonly apiToken?: string;
+  readonly apiBaseUrl: string;
+}
+
 export interface RuntimeConfig {
   readonly nodeEnv: NodeEnv;
   readonly logLevel: LogLevel;
@@ -43,6 +49,7 @@ export interface AppConfig {
   readonly database: DatabaseConfig;
   readonly runtime: RuntimeConfig;
   readonly economy: EconomyConfig;
+  readonly lovense: LovenseConfig;
 }
 
 function parseNodeEnv(value: string | undefined): NodeEnv {
@@ -87,6 +94,13 @@ function loadConfig(): AppConfig {
     economy: {
       verifiedRoleId: getOptionalEnv("ROLE_VERIFIED_ID"),
       patronRoleId: getOptionalEnv("ROLE_PATRON"),
+    },
+    lovense: {
+      apiToken: getOptionalEnv("LOVENSE_API_TOKEN"),
+      apiBaseUrl: getOptionalEnv(
+        "LOVENSE_API_BASE_URL",
+        "https://api.lovense-api.com",
+      )!,
     },
   };
 }
