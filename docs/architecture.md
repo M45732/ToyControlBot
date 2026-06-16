@@ -20,6 +20,26 @@ apps/bot/
 
 The rewrite should preserve valuable behavior, but not legacy architecture problems.
 
+## Domain overview
+
+ToyControlBot controls Lovense toys from within a Discord guild. The main
+domains are Lovense control sessions, a token economy (daily tokens, balances,
+toplist, tipping), shared control-link raffles, and button-driven dashboards.
+See `docs/feature-map.md` for the full migration roadmap and `docs/migration-notes.md`
+for decisions and risks (including rotating the Lovense API tokens that were
+committed in the legacy config).
+
+## Current scaffold
+
+The foundation is in place under `apps/bot/src/`:
+
+- `index.ts` — entrypoint: builds the client, registers events, logs in.
+- `config/` — typed, validated, env-based configuration.
+- `lib/` — `env`, `logger` (pino), `client` (intents), `errors`.
+- `events/` — typed event registry with the `ready` handler.
+- `commands/` — typed slash-command registry (populated per feature).
+- `features/`, `services/` — empty, filled as features are migrated.
+
 ## Design goals
 
 The new bot should be:

@@ -1,0 +1,19 @@
+// Prisma schema for the Discord bot rewrite.
+//
+// Models are added intentionally as features are migrated. The legacy bot used
+// MySQL with tables such as `token_balance`, `token_history`, `daily_token`,
+// `toycontrol`, `toycontrol_user`, and `toycontrol_tip_history`. See
+// `docs/feature-map.md` and `docs/migration-notes.md` for the migration plan
+// and the redesigned data model.
+//
+// Keep schema changes intentional and use migrations. Do not store unnecessary
+// personal data.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
