@@ -37,6 +37,7 @@ bot should be cleaner, safer, and easier to maintain.
 | `token-toplist` pagination | Parsed the page number out of the embed footer text on each button click | Page number is encoded directly in the button `customId` (`economy:toplist:<page>`) | Simpler, doesn't depend on embed text formatting |
 | `daily` claim concurrency | No protection against concurrent claims (read-then-write race in app code) | Cooldown check + redeem update + balance/history write happen as one atomic claim inside a transaction (conditional `updateMany`s plus a unique-constraint guard on first claim) | Caught in review: two simultaneous `/daily` invocations could otherwise both pass the cooldown check and mint duplicate tokens |
 | Daily token streak | Column existed (`streakDay`) but was never actually incremented in legacy code | Streak increments when the previous claim was within 48h of now, otherwise resets to 1 | Implements the documented intent; not yet surfaced in the daily embed |
+| `token-toplist` pagination target user | N/A (new feature) | The originally-requested user id is encoded in the button `customId` (`economy:toplist:<page>:<targetUserId>`) so paging keeps reporting that user's rank, regardless of who clicks the button | Caught in review: without this, pagination buttons reported the button-clicker's rank instead of the originally requested user's |
 
 > Add a row here whenever rebuilt behavior differs from the legacy bot.
 

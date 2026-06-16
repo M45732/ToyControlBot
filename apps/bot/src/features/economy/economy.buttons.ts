@@ -20,15 +20,17 @@ const toplistPaginationHandler: ButtonHandler = {
 
     await interaction.deferUpdate();
 
-    const requestedPage = Number(
-      interaction.customId.slice(TOPLIST_PREFIX.length),
-    );
+    const [pageRaw, targetUserId] = interaction.customId
+      .slice(TOPLIST_PREFIX.length)
+      .split(":");
+    const requestedPage = Number(pageRaw);
     const page = Number.isFinite(requestedPage) ? requestedPage : 1;
+    const userId = targetUserId ?? interaction.user.id;
 
-    const rank = await getRank(interaction.guildId, interaction.user.id);
+    const rank = await getRank(interaction.guildId, userId);
     const description = rank
-      ? `<@${interaction.user.id}> is #${rank} in the toplist`
-      : `<@${interaction.user.id}> has no token yet.`;
+      ? `<@${userId}> is #${rank} in the toplist`
+      : `<@${userId}> has no token yet.`;
 
     const {
       entries,
@@ -40,7 +42,7 @@ const toplistPaginationHandler: ButtonHandler = {
       embeds: [
         buildToplistEmbed(entries, resolvedPage, totalPages, description),
       ],
-      components: [buildToplistButtonRow(resolvedPage, totalPages)],
+      components: [buildToplistButtonRow(resolvedPage, totalPages, userId)],
     });
   },
 };

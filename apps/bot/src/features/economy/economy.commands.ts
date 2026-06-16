@@ -122,7 +122,7 @@ const tokenToplistCommand: SlashCommand = {
 
     await interaction.editReply({
       embeds: [buildToplistEmbed(entries, page, totalPages, description)],
-      components: [buildToplistButtonRow(page, totalPages)],
+      components: [buildToplistButtonRow(page, totalPages, targetUser.id)],
     });
   },
 };

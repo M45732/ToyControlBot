@@ -92,25 +92,26 @@ export function buildToplistEmbed(
 export function buildToplistButtonRow(
   page: number,
   totalPages: number,
+  targetUserId: string,
 ): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId("economy:toplist:1")
+      .setCustomId(`economy:toplist:1:${targetUserId}`)
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("⏮")
       .setDisabled(page <= 1),
     new ButtonBuilder()
-      .setCustomId(`economy:toplist:${page - 1}`)
+      .setCustomId(`economy:toplist:${page - 1}:${targetUserId}`)
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("⏪")
       .setDisabled(page <= 1),
     new ButtonBuilder()
-      .setCustomId(`economy:toplist:${page + 1}`)
+      .setCustomId(`economy:toplist:${page + 1}:${targetUserId}`)
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("⏩")
       .setDisabled(page >= totalPages),
     new ButtonBuilder()
-      .setCustomId(`economy:toplist:${totalPages}`)
+      .setCustomId(`economy:toplist:${totalPages}:${targetUserId}`)
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("⏭")
       .setDisabled(page >= totalPages),
