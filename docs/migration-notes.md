@@ -108,6 +108,12 @@ For each feature:
 6. Update `docs/feature-map.md` (status + new location).
 7. Record any behavior change here.
 
+## Known architectural gaps
+
+| Gap | Impact | Resolution |
+|---|---|---|
+| **No Lovense callback/webhook receiver** | The Lovense Standard API POSTs device data (local IP, port, toy list) to a registered callback URL after QR pairing. Without a running HTTPS receiver and persistent storage of that payload, `/toy-status` (GetToys) may return empty results even when the app is paired and online in a typical cloud deployment. This is *not* a code bug — the same cloud-API GetToys approach was used in the legacy bot. | Implement a callback receiver + a `LovenseDevice` Prisma model in the control-sessions phase (phase 5). `/toy-status` is intentionally kept as scaffolding. |
+
 ## Open questions
 
 | Question | Decision needed |

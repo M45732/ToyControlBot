@@ -40,6 +40,13 @@ export async function requestPairingQr(
  *
  * Returns a discriminated status instead of throwing, since "app offline" and
  * "no toys connected" are both expected, common states (not errors).
+ *
+ * ⚠ Architectural note: the Lovense Standard API requires a registered callback
+ * URL that Lovense POSTs device data (local IP, toy list) to after QR pairing.
+ * Without a running callback receiver and stored device data, GetToys may return
+ * empty results in a typical cloud deployment even when the app is paired. Full
+ * reliability requires the callback/device persistence layer planned for the
+ * control-sessions phase (phase 5). See docs/migration-notes.md.
  */
 export async function getConnectedToys(
   discordUserId: string,
