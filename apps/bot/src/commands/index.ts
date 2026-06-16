@@ -4,6 +4,7 @@ import type {
 } from "discord.js";
 
 import { economyCommands } from "../features/economy/economy.commands.js";
+import { lovenseCommands } from "../features/lovense/lovense.commands.js";
 
 /**
  * The contract every slash command module must satisfy.
@@ -22,7 +23,7 @@ export interface SlashCommand {
  * Commands are added here as features are migrated from the legacy bot. See
  * `docs/feature-map.md` for the migration roadmap.
  */
-export const commands: SlashCommand[] = [...economyCommands];
+export const commands: SlashCommand[] = [...economyCommands, ...lovenseCommands];
 
 /**
  * Look up a registered command by its slash-command name.

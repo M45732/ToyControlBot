@@ -24,6 +24,7 @@ bot should be cleaner, safer, and easier to maintain.
 | 2026-06-16 | Centralize permission checks in a service | Legacy checks were inconsistent and inlined |
 | 2026-06-16 | Add a button-handler registry (`apps/bot/src/buttons/`) alongside the command registry | Mirrors the typed command dispatch pattern for interactive components (e.g. toplist pagination) |
 | 2026-06-16 | Wire `interactionCreate` to dispatch commands and buttons, with errors converted to safe user-facing replies | Required for any slash command to actually run; centralizes error-to-message handling |
+| 2026-06-16 | Lovense API token is read lazily from config on each call (`LOVENSE_API_TOKEN`, optional) instead of being required at startup | Lets a guild run the bot before toy control is configured; `/toy-connect` and `/toy-status` fail with a friendly message instead of crashing the whole process on boot |
 
 ## Behavior changes
 
@@ -39,6 +40,9 @@ bot should be cleaner, safer, and easier to maintain.
 | Daily token streak | Column existed (`streakDay`) but was never actually incremented in legacy code | Streak increments when the previous claim was within 48h of now, otherwise resets to 1 | Implements the documented intent; not yet surfaced in the daily embed |
 | `token-toplist` pagination target user | N/A (new feature) | The originally-requested user id is encoded in the button `customId` (`economy:toplist:<page>:<targetUserId>`) so paging keeps reporting that user's rank, regardless of who clicks the button | Caught in review: without this, pagination buttons reported the button-clicker's rank instead of the originally requested user's |
 | `requireGuildMember` member resolution | N/A (new feature) | Returns the cached `GuildMember` only if `interaction.member instanceof GuildMember`; otherwise fetches the member explicitly via `interaction.guild.members.fetch(...)` | Caught in review: when the guild isn't cached, discord.js hands back the raw API interaction-member shape (`roles: string[]`, `premium_since`), which the old type-cast silently misread — `isServerBooster` saw `premiumSince === undefined` and granted the booster bonus to everyone |
+| Lovense `/api/lan/getQrCode` host | Mixed `apps.lovense.com` (commented out) and `api.lovense-api.com` calls across legacy files | Standardized on `api.lovense-api.com`, configurable via `LOVENSE_API_BASE_URL` | Legacy code had both hosts present (one commented out); picked the one actually in use and made it overridable instead of hardcoded |
+| Lovense API-down error reporting | Pinged a hardcoded Discord user ID (`<@244454602517381120>`) in a non-ephemeral channel message with the raw API error code | Throws a `UserFacingError` with a friendly message, shown ephemerally to the requesting user; the raw code/message is logged internally instead | Hardcoding a personal Discord ID is not portable across servers, and surfacing raw API errors/non-ephemeral messages doesn't fit the new error-handling convention (see `lib/errors.ts`) |
+| Toy battery reporting (`-1` battery) | Treated as `100%` inline in the QR/session embed code | Same behavior, moved into `lovense.service.ts` (`getConnectedToys`) | Preserved intentionally — some toys don't report battery and the API returns `-1` for them |
 
 > Add a row here whenever rebuilt behavior differs from the legacy bot.
 
