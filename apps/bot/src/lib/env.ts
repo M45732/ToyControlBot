@@ -22,7 +22,10 @@ export function getRequiredEnv(name: string): string {
 /**
  * Read an optional environment variable, returning `fallback` when unset.
  */
-export function getOptionalEnv(name: string, fallback?: string): string | undefined {
+export function getOptionalEnv(
+  name: string,
+  fallback?: string,
+): string | undefined {
   const value = process.env[name];
   if (value === undefined || value.trim() === "") {
     return fallback;

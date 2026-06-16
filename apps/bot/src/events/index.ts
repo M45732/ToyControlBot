@@ -1,6 +1,7 @@
 import type { Client } from "discord.js";
 
 import { createLogger } from "../lib/logger.js";
+import { interactionCreateEvent } from "./interactionCreate.event.js";
 import { readyEvent } from "./ready.event.js";
 import type { BotEvent } from "./types.js";
 
@@ -9,10 +10,9 @@ const log = createLogger("events");
 /**
  * Every event handler the bot should register.
  *
- * Add new handlers here as features are migrated (e.g. `interactionCreate` for
- * slash command dispatch).
+ * Add new handlers here as features are migrated.
  */
-const events: BotEvent[] = [readyEvent];
+const events: BotEvent[] = [readyEvent, interactionCreateEvent];
 
 /**
  * Wire all registered event handlers onto the Discord client.

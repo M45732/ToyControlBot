@@ -22,6 +22,8 @@ bot should be cleaner, safer, and easier to maintain.
 | 2026-06-16 | pino structured logging instead of Winston | Lightweight, JSON-friendly |
 | 2026-06-16 | Minimal Discord intents, expanded per feature | Legacy enabled nearly every intent; reduce scope |
 | 2026-06-16 | Centralize permission checks in a service | Legacy checks were inconsistent and inlined |
+| 2026-06-16 | Add a button-handler registry (`apps/bot/src/buttons/`) alongside the command registry | Mirrors the typed command dispatch pattern for interactive components (e.g. toplist pagination) |
+| 2026-06-16 | Wire `interactionCreate` to dispatch commands and buttons, with errors converted to safe user-facing replies | Required for any slash command to actually run; centralizes error-to-message handling |
 
 ## Behavior changes
 
@@ -29,8 +31,11 @@ bot should be cleaner, safer, and easier to maintain.
 |---|---|---|---|
 | Lovense API credentials | Hardcoded in `config/lovenseOptions.yml` | Loaded from environment | Secrets must never be committed |
 | Database access | Raw MySQL via `getDataFromDB(query)` with string interpolation | Prisma models + service layer | Security + maintainability |
-| Command deploy | `!deploy-guild-commands` / `!deploy-global-commands` chat commands | Deploy script or owner slash command | Remove prefix commands |
-| `ping` / `token-balance` permissions | Gated on `BanMembers` (unusual for read-only utility) | To be reviewed; likely relaxed | The legacy gate looks accidental, not intentional |
+| Command deploy | `!deploy-guild-commands` / `!deploy-global-commands` chat commands | `npm run deploy-commands` script (`apps/bot/src/scripts/deploy-commands.ts`) | Remove prefix commands |
+| `ping` / `token-balance` permissions | Gated on `BanMembers` (unusual for read-only utility) | Gate removed; everyone can check their own balance/history | The legacy gate looked accidental, not intentional |
+| `daily` verified-role gate | Hardcoded check against `ROLE_VERIFIED_ID` env var; failed loudly if unset | Gate is skipped entirely when `ROLE_VERIFIED_ID` is not configured | Avoids a hard dependency on a specific guild's role setup during early development |
+| `token-toplist` pagination | Parsed the page number out of the embed footer text on each button click | Page number is encoded directly in the button `customId` (`economy:toplist:<page>`) | Simpler, doesn't depend on embed text formatting |
+| Daily token streak | Column existed (`streakDay`) but was never actually incremented in legacy code | Streak increments when the previous claim was within 48h of now, otherwise resets to 1 | Implements the documented intent; not yet surfaced in the daily embed |
 
 > Add a row here whenever rebuilt behavior differs from the legacy bot.
 
@@ -102,7 +107,7 @@ For each feature:
 |---|---|
 | Keep the subscriptions feature, or drop it? | Product decision |
 | Implement vibration pattern files, or skip? | Product decision |
-| Should `ping` / read-only commands keep the `BanMembers` gate? | Likely relax |
+| Should `ping` / read-only commands keep the `BanMembers` gate? | Resolved: relaxed for `token-balance` / `token-toplist`. `ping` itself is not yet migrated |
 | One database per environment (dev/prod)? | Ops decision |
 | Register commands guild-scoped during development? | Recommended for fast iteration |
 | Data migration from the legacy MySQL database? | Need source data + mapping plan |

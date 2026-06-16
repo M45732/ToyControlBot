@@ -45,9 +45,10 @@ Suggested build order. Later phases depend on earlier ones.
 1. **Foundation** — project scaffold, config, logger, client, event/command
    dispatch. *(done)*
 2. **Persistence** — Prisma schema + database service for the economy and
-   session tables.
+   session tables. *(done — economy tables only; session tables land with
+   Lovense control sessions)*
 3. **Token economy** — daily token, balance, toplist (no toys required; good
-   first vertical slice through the new architecture).
+   first vertical slice through the new architecture). *(done)*
 4. **Lovense core** — config-driven Lovense client/service, QR pairing.
 5. **Control sessions** — reaction-vote sessions (gangbang/orgy), session
    persistence and restore-on-startup.
@@ -68,18 +69,19 @@ Suggested build order. Later phases depend on earlier ones.
 | Command loader | `handlers/Commands.js` | Migrated (registry) | `apps/bot/src/commands/index.ts` | Typed `SlashCommand` registry; commands added per feature |
 | Event loader | `handlers/Events.js`, `validation/EventNames.js` | Migrated (registry) | `apps/bot/src/events/` | Typed `BotEvent` registry |
 | Ready event | `events/ready/ready.js` | Migrated (basic) | `apps/bot/src/events/ready.event.ts` | Logs online status. Session restore is deferred to the sessions feature |
-| Command registration/deploy | `util/registerCommands.js`, `events/message/messageCreate.js` (`!deploy-*`) | Planned | `apps/bot/src/services/command-deploy.service.ts` | Replace prefix deploy commands with a deploy script / owner slash command |
-| Error handling | scattered | In progress | `apps/bot/src/lib/errors.ts` | `UserFacingError` + safe user messages; no stack traces to users |
-| Permissions | `validation/Permissions.js` + inline checks | Planned | `apps/bot/src/services/permission.service.ts` | Centralize role / Discord-permission / guild-context checks |
-| Database access | `structures/sql/Pool.js` (MySQL, string-interpolated SQL) | Planned | `prisma/schema.prisma`, `apps/bot/src/services/database.service.ts` | **Replace raw SQL with Prisma (fixes SQL-injection risk).** Redesign schema |
+| Command registration/deploy | `util/registerCommands.js`, `events/message/messageCreate.js` (`!deploy-*`) | Migrated | `apps/bot/src/scripts/deploy-commands.ts` | `npm run deploy-commands`; guild-scoped if `DISCORD_GUILD_ID` is set, else global |
+| Interaction dispatch | `events/interaction/interactionCreate.js` | Migrated (commands + buttons) | `apps/bot/src/events/interactionCreate.event.ts` | Dispatches slash commands via the command registry and buttons via a new button-handler registry (`apps/bot/src/buttons/`) |
+| Error handling | scattered | Migrated | `apps/bot/src/lib/errors.ts`, wired into `interactionCreate.event.ts` | `UserFacingError` + safe user messages; no stack traces to users |
+| Permissions | `validation/Permissions.js` + inline checks | Migrated (core) | `apps/bot/src/services/permission.service.ts` | `requireGuildMember` + `memberHasRole`; feature-specific gates (e.g. verified/patron) live in each feature's `*.permissions.ts` |
+| Database access | `structures/sql/Pool.js` (MySQL, string-interpolated SQL) | Migrated (economy) | `prisma/schema.prisma`, `apps/bot/src/services/database.service.ts` | **Replaced raw SQL with Prisma (fixes SQL-injection risk).** `TokenBalance` / `TokenHistory` / `DailyToken` models added; session tables to follow with Lovense |
 
 ## Token economy
 
 | Old Feature | Old Location | Status | New Location | Notes |
 |---|---|---|---|---|
-| Daily free token | `commands/economy/daily-free-token.js` | Planned | `apps/bot/src/features/economy/` | Base 100 + booster +100 + patron +100, 24h cooldown, streak. Tables `daily_token`, `token_history` |
-| Token balance | `commands/economy/token-balance.js` | Planned | `apps/bot/src/features/economy/` | `current` / `history` view. **Reconsider permission** (legacy gated on `BanMembers`) |
-| Token toplist | `commands/economy/token-toplist.js` | Planned | `apps/bot/src/features/economy/` | Paginated leaderboard with first/prev/next/last buttons |
+| Daily free token | `commands/economy/daily-free-token.js` | Migrated | `apps/bot/src/features/economy/` | Base 100 + booster +100 + patron +100, 24h cooldown, streak. Models `DailyToken`, `TokenHistory`. Verified-role gate is optional (skipped if `ROLE_VERIFIED_ID` unset) |
+| Token balance | `commands/economy/token-balance.js` | Migrated | `apps/bot/src/features/economy/` | `current` / `history` view via `/token-balance view:`. Dropped the `BanMembers` gate (see migration notes) |
+| Token toplist | `commands/economy/token-toplist.js` | Migrated | `apps/bot/src/features/economy/` | Paginated leaderboard with first/prev/next/last buttons, dispatched through the new button-handler registry |
 | Subscriptions | `commands/economy/subscriptions.js` | Not started | `apps/bot/src/features/subscriptions/` | Legacy is a stub. Decide whether to design properly or skip |
 
 ## Lovense control

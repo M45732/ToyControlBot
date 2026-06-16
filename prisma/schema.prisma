@@ -17,3 +17,39 @@ datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+
+/// A user's current token balance within a guild.
+model TokenBalance {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  balance   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([guildId, userId])
+  @@index([guildId, balance])
+}
+
+/// An append-only ledger of every token balance change, for history views and auditing.
+model TokenHistory {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  amount    Int
+  eventType String
+  eventId   String?
+  createdAt DateTime @default(now())
+
+  @@index([guildId, userId, createdAt])
+}
+
+/// Tracks the last daily-token redemption per user, per guild, for the 24h cooldown and streak.
+model DailyToken {
+  id          String   @id @default(cuid())
+  guildId     String
+  userId      String
+  lastRedeem  DateTime
+  streakDays  Int      @default(1)
+
+  @@unique([guildId, userId])
+}

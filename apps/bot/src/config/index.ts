@@ -21,6 +21,13 @@ export interface DiscordConfig {
   readonly guildId?: string;
 }
 
+export interface EconomyConfig {
+  /** Role required to claim the daily token. Daily is disabled if unset. */
+  readonly verifiedRoleId?: string;
+  /** Role that grants a bonus on the daily token claim. */
+  readonly patronRoleId?: string;
+}
+
 export interface DatabaseConfig {
   readonly url?: string;
 }
@@ -35,6 +42,7 @@ export interface AppConfig {
   readonly discord: DiscordConfig;
   readonly database: DatabaseConfig;
   readonly runtime: RuntimeConfig;
+  readonly economy: EconomyConfig;
 }
 
 function parseNodeEnv(value: string | undefined): NodeEnv {
@@ -45,7 +53,14 @@ function parseNodeEnv(value: string | undefined): NodeEnv {
 }
 
 function parseLogLevel(value: string | undefined): LogLevel {
-  const allowed: LogLevel[] = ["fatal", "error", "warn", "info", "debug", "trace"];
+  const allowed: LogLevel[] = [
+    "fatal",
+    "error",
+    "warn",
+    "info",
+    "debug",
+    "trace",
+  ];
   if (value && (allowed as string[]).includes(value)) {
     return value as LogLevel;
   }
@@ -68,6 +83,10 @@ function loadConfig(): AppConfig {
       nodeEnv,
       logLevel: parseLogLevel(process.env.LOG_LEVEL),
       isProduction: nodeEnv === "production",
+    },
+    economy: {
+      verifiedRoleId: getOptionalEnv("ROLE_VERIFIED_ID"),
+      patronRoleId: getOptionalEnv("ROLE_PATRON_ID"),
     },
   };
 }

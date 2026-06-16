@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "deploy-commands": "tsx apps/bot/src/scripts/deploy-commands.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",

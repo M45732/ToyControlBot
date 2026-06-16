@@ -15,6 +15,8 @@ export interface BotEvent<K extends keyof ClientEvents = keyof ClientEvents> {
 /**
  * Helper to define an event with full type inference on `execute` arguments.
  */
-export function defineEvent<K extends keyof ClientEvents>(event: BotEvent<K>): BotEvent<K> {
+export function defineEvent<K extends keyof ClientEvents>(
+  event: BotEvent<K>,
+): BotEvent<K> {
   return event;
 }
