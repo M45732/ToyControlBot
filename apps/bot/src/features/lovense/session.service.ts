@@ -9,6 +9,7 @@ import {
 } from "discord.js";
 
 import { prisma } from "../../services/database.service.js";
+import { UserFacingError } from "../../lib/errors.js";
 import { createLogger } from "../../lib/logger.js";
 import { sendVibrate } from "./lovense.client.js";
 import type { SessionMode } from "./session.types.js";
@@ -94,6 +95,17 @@ export async function startSession(
   ownerId: string,
   mode: SessionMode,
 ): Promise<string> {
+  // Prevent a user from running two sessions simultaneously — concurrent vote
+  // loops for the same Lovense uid would race and produce unpredictable output.
+  const alreadyParticipating = await prisma.toyControlUser.findFirst({
+    where: { userId: ownerId, session: { active: true } },
+  });
+  if (alreadyParticipating) {
+    throw new UserFacingError(
+      "You're already in an active session. Leave it first before starting a new one.",
+    );
+  }
+
   const channel = await client.channels.fetch(channelId);
   if (!(channel instanceof TextChannel)) {
     throw new Error("Session channel is not a text channel");
@@ -222,9 +234,26 @@ async function runVoteTick(
 }
 
 /**
- * End a session: mark inactive in DB and stop its vote loop.
+ * End a session: send level-0 stop to all participants, then mark inactive and
+ * stop the vote loop.
+ *
+ * Because sendVibrate uses timeSec:0 (run until overridden), the toys will
+ * otherwise keep vibrating at the last voted level after the session ends.
  */
 export async function endSession(messageId: string): Promise<void> {
+  const session = await prisma.toyControl.findUnique({
+    where: { messageId },
+    include: { participants: true },
+  });
+
+  if (session) {
+    for (const { userId } of session.participants) {
+      await sendVibrate(userId, 0).catch((err: unknown) =>
+        log.warn({ err, userId }, "Failed to send stop vibration on session end"),
+      );
+    }
+  }
+
   stopVoteLoop(messageId);
   await prisma.toyControl.updateMany({
     where: { messageId, active: true },
@@ -243,7 +272,8 @@ function stopVoteLoop(messageId: string): void {
 
 /**
  * Add a user to an existing session.
- * Returns false if they're already in the session or the session is inactive.
+ * Returns false if the session is inactive, the user is already in this session,
+ * or the user is already participating in another active session.
  */
 export async function joinSession(messageId: string, userId: string): Promise<boolean> {
   const session = await prisma.toyControl.findUnique({
@@ -252,17 +282,25 @@ export async function joinSession(messageId: string, userId: string): Promise<bo
   });
   if (!session?.active) return false;
 
+  // Prevent joining a second active session — concurrent vote loops for the
+  // same Lovense uid would race and produce unpredictable vibration output.
+  const alreadyParticipating = await prisma.toyControlUser.findFirst({
+    where: { userId, session: { active: true } },
+  });
+  if (alreadyParticipating) return false;
+
   try {
     await prisma.toyControlUser.create({ data: { sessionId: session.id, userId } });
     return true;
   } catch {
-    return false; // unique constraint = already joined
+    return false; // unique constraint = already joined this session
   }
 }
 
 /**
  * Remove a user from a session.
- * Owner or last participant ends the session entirely.
+ * Returns "not-found" if the session is inactive or the user is not a participant.
+ * Owner or last remaining participant ends the session entirely.
  */
 export async function leaveSession(
   messageId: string,
@@ -273,6 +311,9 @@ export async function leaveSession(
     include: { participants: true },
   });
   if (!session?.active) return "not-found";
+
+  const isParticipant = session.participants.some((p) => p.userId === userId);
+  if (!isParticipant) return "not-found";
 
   if (session.ownerId === userId || session.participants.length <= 1) {
     await endSession(messageId);

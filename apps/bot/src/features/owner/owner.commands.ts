@@ -37,7 +37,12 @@ const restartCommand: SlashCommand = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const { ownerId } = config.owner;
-    if (ownerId && interaction.user.id !== ownerId) {
+    if (!ownerId) {
+      throw new UserFacingError(
+        "This command requires OWNER_DISCORD_ID to be configured. Contact the server administrator.",
+      );
+    }
+    if (interaction.user.id !== ownerId) {
       throw new UserFacingError("Only the bot owner can use this command.");
     }
 
