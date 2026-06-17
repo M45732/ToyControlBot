@@ -22,6 +22,14 @@ const VOTE_EMOJIS = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5�
 /** In-memory registry: messageId → interval handle */
 const activeLoops = new Map<string, ReturnType<typeof setInterval>>();
 
+/**
+ * Channels where a session start is in progress. Guards against two concurrent
+ * /toy-session calls both passing the DB check before either inserts a row.
+ * Safe because Node.js is single-threaded: the has()+add() pair runs without
+ * any await in between, so it is atomic within the event loop.
+ */
+const pendingChannels = new Set<string>();
+
 /** Map a vote level (0–5) to a Lovense API vibration value (0–20). */
 function levelToVibration(level: number): number {
   return level === 0 ? 0 : level * 4;
@@ -107,6 +115,14 @@ export async function startSession(
   }
 
   // Enforce one active session per channel so /tip always has a clear target.
+  // The pendingChannels Set closes the TOCTOU window between the DB check and
+  // the DB insert (which can't be placed in a single transaction because the
+  // Discord message send happens in between).
+  if (pendingChannels.has(channelId)) {
+    throw new UserFacingError(
+      "A session is already being started in this channel. Please wait a moment.",
+    );
+  }
   const existingChannelSession = await prisma.toyControl.findFirst({
     where: { channelId, active: true },
   });
@@ -115,6 +131,7 @@ export async function startSession(
       "There is already an active session in this channel. End it before starting a new one.",
     );
   }
+  pendingChannels.add(channelId);
 
   const channel = await client.channels.fetch(channelId);
   if (!(channel instanceof TextChannel)) {
@@ -136,17 +153,22 @@ export async function startSession(
     await sessionMsg.edit({ components: [buildSessionRow(mode, sessionMsg.id)] });
   }
 
-  const session = await prisma.toyControl.create({
-    data: {
-      guildId,
-      channelId,
-      messageId: sessionMsg.id,
-      ownerId,
-      sessionMode: mode,
-      active: true,
-      participants: { create: { userId: ownerId } },
-    },
-  });
+  let session: Awaited<ReturnType<typeof prisma.toyControl.create>>;
+  try {
+    session = await prisma.toyControl.create({
+      data: {
+        guildId,
+        channelId,
+        messageId: sessionMsg.id,
+        ownerId,
+        sessionMode: mode,
+        active: true,
+        participants: { create: { userId: ownerId } },
+      },
+    });
+  } finally {
+    pendingChannels.delete(channelId);
+  }
 
   for (const emoji of VOTE_EMOJIS) {
     await sessionMsg

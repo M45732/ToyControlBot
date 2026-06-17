@@ -42,7 +42,15 @@ export async function executeTip(
     );
   }
 
-  const receiverIds = session.participants.map((p) => p.userId);
+  // Exclude the sender so tips actually transfer tokens between users.
+  // If the sender is the only participant (solo session), reject the tip.
+  const receiverIds = session.participants
+    .map((p) => p.userId)
+    .filter((id) => id !== senderId);
+
+  if (receiverIds.length === 0) {
+    throw new UserFacingError("You cannot tip a session you are participating in.");
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     // Atomically check balance and deduct. The conditional WHERE on `balance >= amount`
