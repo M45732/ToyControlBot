@@ -30,6 +30,12 @@ const activeLoops = new Map<string, ReturnType<typeof setInterval>>();
  */
 const pendingChannels = new Set<string>();
 
+/**
+ * Users where a session join is in progress. Closes the same TOCTOU gap in
+ * joinSession between the "already in active session" check and the insert.
+ */
+const pendingUsers = new Set<string>();
+
 /** Map a vote level (0–5) to a Lovense API vibration value (0–20). */
 function levelToVibration(level: number): number {
   return level === 0 ? 0 : level * 4;
@@ -133,29 +139,32 @@ export async function startSession(
   }
   pendingChannels.add(channelId);
 
-  const channel = await client.channels.fetch(channelId);
-  if (!(channel instanceof TextChannel)) {
-    throw new Error("Session channel is not a text channel");
-  }
-
-  const embed = buildSessionEmbed(mode, ownerId, [ownerId], 0, null);
-  const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId("session:leave")
-      .setLabel("⏹ End/Leave")
-      .setStyle(ButtonStyle.Danger),
-  );
-
-  const sessionMsg = await channel.send({ embeds: [embed], components: [placeholderRow] });
-
-  // Update buttons now that we have the real message ID (join button needs it)
-  if (mode === "orgy") {
-    await sessionMsg.edit({ components: [buildSessionRow(mode, sessionMsg.id)] });
-  }
-
-  let session: Awaited<ReturnType<typeof prisma.toyControl.create>>;
+  // Wrap everything from here through the DB create in a try/finally so the
+  // channel lock is released even if fetch, send, edit, or create throws.
+  let sessionMsgId!: string;
+  let sessionDbId!: string;
   try {
-    session = await prisma.toyControl.create({
+    const channel = await client.channels.fetch(channelId);
+    if (!(channel instanceof TextChannel)) {
+      throw new Error("Session channel is not a text channel");
+    }
+
+    const embed = buildSessionEmbed(mode, ownerId, [ownerId], 0, null);
+    const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("session:leave")
+        .setLabel("⏹ End/Leave")
+        .setStyle(ButtonStyle.Danger),
+    );
+
+    const sessionMsg = await channel.send({ embeds: [embed], components: [placeholderRow] });
+
+    // Update buttons now that we have the real message ID (join button needs it)
+    if (mode === "orgy") {
+      await sessionMsg.edit({ components: [buildSessionRow(mode, sessionMsg.id)] });
+    }
+
+    const session = await prisma.toyControl.create({
       data: {
         guildId,
         channelId,
@@ -166,19 +175,22 @@ export async function startSession(
         participants: { create: { userId: ownerId } },
       },
     });
+
+    sessionMsgId = sessionMsg.id;
+    sessionDbId = session.id;
+
+    for (const emoji of VOTE_EMOJIS) {
+      await sessionMsg
+        .react(emoji)
+        .catch((err: unknown) => log.warn({ err, emoji }, "Failed to add vote reaction"));
+    }
   } finally {
     pendingChannels.delete(channelId);
   }
 
-  for (const emoji of VOTE_EMOJIS) {
-    await sessionMsg
-      .react(emoji)
-      .catch((err: unknown) => log.warn({ err, emoji }, "Failed to add vote reaction"));
-  }
+  startVoteLoop(client, sessionDbId, sessionMsgId, channelId);
 
-  startVoteLoop(client, session.id, sessionMsg.id, channelId);
-
-  return sessionMsg.id;
+  return sessionMsgId;
 }
 
 /**
@@ -316,16 +328,20 @@ export async function joinSession(messageId: string, userId: string): Promise<bo
 
   // Prevent joining a second active session — concurrent vote loops for the
   // same Lovense uid would race and produce unpredictable vibration output.
+  if (pendingUsers.has(userId)) return false;
   const alreadyParticipating = await prisma.toyControlUser.findFirst({
     where: { userId, session: { active: true } },
   });
   if (alreadyParticipating) return false;
 
+  pendingUsers.add(userId);
   try {
     await prisma.toyControlUser.create({ data: { sessionId: session.id, userId } });
     return true;
   } catch {
     return false; // unique constraint = already joined this session
+  } finally {
+    pendingUsers.delete(userId);
   }
 }
 
