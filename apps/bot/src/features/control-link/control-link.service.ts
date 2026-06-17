@@ -7,10 +7,13 @@ const LINK_PATTERNS: Array<{
   pattern: RegExp;
   provider: ParsedControlLink["provider"];
 }> = [
+  // Lovense Standard API remote-control links (/t2/) and partner-control links (/c/)
   { pattern: /https?:\/\/api\.lovense-api\.com\/t2\/[^\s]+/i, provider: "lovense" },
-  { pattern: /https?:\/\/lovense\.com\/[^\s]+/i, provider: "lovense" },
-  { pattern: /https?:\/\/handyfeeling\.com\/[^\s]+/i, provider: "handyfeeling" },
-  { pattern: /https?:\/\/xtoys\.app\/[^\s]+/i, provider: "xtoys" },
+  { pattern: /https?:\/\/lovense\.com\/c\/[^\s]+/i, provider: "lovense" },
+  // Handyfeeling session/connect links (path segment with session code, not root or static pages)
+  { pattern: /https?:\/\/handyfeeling\.com\/(?:sessions?|connect)\/[^\s]+/i, provider: "handyfeeling" },
+  // xtoys room/toy sharing links
+  { pattern: /https?:\/\/xtoys\.app\/(?:r|rooms?|toys?)\/[^\s]+/i, provider: "xtoys" },
 ];
 
 /**

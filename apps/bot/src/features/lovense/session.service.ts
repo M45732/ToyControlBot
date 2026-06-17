@@ -106,6 +106,16 @@ export async function startSession(
     );
   }
 
+  // Enforce one active session per channel so /tip always has a clear target.
+  const existingChannelSession = await prisma.toyControl.findFirst({
+    where: { channelId, active: true },
+  });
+  if (existingChannelSession) {
+    throw new UserFacingError(
+      "There is already an active session in this channel. End it before starting a new one.",
+    );
+  }
+
   const channel = await client.channels.fetch(channelId);
   if (!(channel instanceof TextChannel)) {
     throw new Error("Session channel is not a text channel");
@@ -319,6 +329,12 @@ export async function leaveSession(
     await endSession(messageId);
     return "ended";
   }
+
+  // Stop the leaver's toy before removing them — timeSec:0 means it keeps
+  // running at the last voted level once they're no longer in the loop.
+  await sendVibrate(userId, 0).catch((err: unknown) =>
+    log.warn({ err, userId }, "Failed to stop vibration for leaving participant"),
+  );
 
   await prisma.toyControlUser.deleteMany({
     where: { sessionId: session.id, userId },

@@ -57,13 +57,25 @@ export const messageCreateEvent = defineEvent({
         .setStyle(ButtonStyle.Success),
     );
 
-    // Delete the original message so the URL is not visible to non-winners.
-    // Do this before the reply so the link is already gone when the raffle embed appears.
-    await message.delete().catch((err: unknown) =>
+    if (!(message.channel instanceof BaseGuildTextChannel)) return;
+
+    // Delete the original message before posting the raffle so the URL is never
+    // visible to non-winners. If we lack Manage Messages permission, abort: running
+    // the raffle with the link still visible defeats the purpose.
+    let deleted = false;
+    await message.delete().then(() => { deleted = true; }).catch((err: unknown) =>
       log.warn({ err }, "Failed to delete original control-link message"),
     );
 
-    if (!(message.channel instanceof BaseGuildTextChannel)) return;
+    if (!deleted) {
+      await message.author
+        .send(
+          `Your control link couldn't be raffled because the bot couldn't delete your message in <#${message.channelId}>. ` +
+          "Please make sure the bot has the **Manage Messages** permission in that channel.",
+        )
+        .catch(() => undefined);
+      return;
+    }
 
     let raffleMsg: Message;
     try {
