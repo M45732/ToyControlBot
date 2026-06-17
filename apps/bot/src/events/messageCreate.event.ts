@@ -29,7 +29,18 @@ export const messageCreateEvent = defineEvent({
     const { allowedChannelId } = config.controlLink;
 
     if (allowedChannelId && message.channelId !== allowedChannelId) {
-      await message.delete().catch(() => undefined);
+      let deleted = false;
+      await message.delete()
+        .then(() => { deleted = true; })
+        .catch((err: unknown) =>
+          log.warn({ err, channelId: message.channelId }, "Failed to delete out-of-channel control-link message"),
+        );
+
+      if (!deleted) {
+        // Link remains visible — do not mislead the author or silently fail
+        return;
+      }
+
       await message.author
         .send(
           `Your control link was removed from <#${message.channelId}>. Control links are only allowed in <#${allowedChannelId}>.`,

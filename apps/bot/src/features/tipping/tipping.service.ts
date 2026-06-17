@@ -95,7 +95,7 @@ export async function executeTip(
           messageId: session.messageId,
           senderId,
           receiverId,
-          amount,
+          amount: credit,
           message: tipMessage,
         },
       });
