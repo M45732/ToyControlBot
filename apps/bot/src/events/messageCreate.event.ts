@@ -1,4 +1,5 @@
 import {
+  BaseGuildTextChannel,
   Events,
   type Message,
   EmbedBuilder,
@@ -56,9 +57,17 @@ export const messageCreateEvent = defineEvent({
         .setStyle(ButtonStyle.Success),
     );
 
+    // Delete the original message so the URL is not visible to non-winners.
+    // Do this before the reply so the link is already gone when the raffle embed appears.
+    await message.delete().catch((err: unknown) =>
+      log.warn({ err }, "Failed to delete original control-link message"),
+    );
+
+    if (!(message.channel instanceof BaseGuildTextChannel)) return;
+
     let raffleMsg: Message;
     try {
-      raffleMsg = await message.reply({ embeds: [embed], components: [placeholderRow] });
+      raffleMsg = await message.channel.send({ embeds: [embed], components: [placeholderRow] });
     } catch (err) {
       log.error({ err }, "Failed to send raffle message");
       return;

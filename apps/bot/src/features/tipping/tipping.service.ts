@@ -1,5 +1,4 @@
 import { prisma } from "../../services/database.service.js";
-import { adjustBalance, getBalance } from "../economy/economy.service.js";
 import { sendVibrate } from "../lovense/lovense.client.js";
 import { createLogger } from "../../lib/logger.js";
 import { UserFacingError } from "../../lib/errors.js";
@@ -17,8 +16,12 @@ export interface TipResult {
 }
 
 /**
- * Execute a tip: deduct from sender, credit each session participant, trigger toy.
- * Requires an active toy-control session in the channel.
+ * Execute a tip atomically: check and deduct sender balance, credit each session
+ * participant (distributing the full amount with no rounding loss), trigger toy.
+ *
+ * The balance check and deduction run inside a transaction with a conditional
+ * update so concurrent tips from the same user cannot both succeed if there
+ * are insufficient tokens.
  */
 export async function executeTip(
   guildId: string,
@@ -39,19 +42,52 @@ export async function executeTip(
   }
 
   const receiverIds = session.participants.map((p) => p.userId);
-  const senderBalance = await getBalance(guildId, senderId);
 
-  if (senderBalance < amount) {
+  // Atomically check balance and deduct. The conditional WHERE on `balance >= amount`
+  // means a concurrent tip that races here will get count=0 and we throw, preventing
+  // the balance from going negative.
+  const deductResult = await prisma.tokenBalance.updateMany({
+    where: {
+      guildId,
+      userId: senderId,
+      balance: { gte: amount },
+    },
+    data: { balance: { decrement: amount } },
+  });
+
+  if (deductResult.count === 0) {
+    // Either no balance row exists or balance was insufficient
+    const row = await prisma.tokenBalance.findUnique({
+      where: { guildId_userId: { guildId, userId: senderId } },
+    });
+    const current = row?.balance ?? 0;
     throw new UserFacingError(
-      `You don't have enough tokens. Your balance is ${senderBalance}, tip is ${amount}.`,
+      `You don't have enough tokens. Your balance is ${current}, tip is ${amount}.`,
     );
   }
 
-  await adjustBalance(guildId, senderId, -amount, "tip_send", session.messageId);
+  // Record the sender debit in history
+  await prisma.tokenHistory.create({
+    data: { guildId, userId: senderId, amount: -amount, eventType: "tip_send", eventId: session.messageId },
+  });
 
-  const splitAmount = Math.floor(amount / receiverIds.length);
-  for (const receiverId of receiverIds) {
-    await adjustBalance(guildId, receiverId, splitAmount, "tip_received", session.messageId);
+  // Distribute tokens to receivers — give the remainder to the first participant
+  // so the total credited always equals the total debited.
+  const base = Math.floor(amount / receiverIds.length);
+  const remainder = amount - base * receiverIds.length;
+
+  for (let i = 0; i < receiverIds.length; i++) {
+    const credit = i === 0 ? base + remainder : base;
+    const receiverId = receiverIds[i]!;
+
+    await prisma.tokenBalance.upsert({
+      where: { guildId_userId: { guildId, userId: receiverId } },
+      update: { balance: { increment: credit } },
+      create: { guildId, userId: receiverId, balance: credit },
+    });
+    await prisma.tokenHistory.create({
+      data: { guildId, userId: receiverId, amount: credit, eventType: "tip_received", eventId: session.messageId },
+    });
     await prisma.tipHistory.create({
       data: {
         guildId,
@@ -76,6 +112,8 @@ export async function executeTip(
     }
   }, TIP_VIBRATION_DURATION_MS);
 
-  const senderNewBalance = await getBalance(guildId, senderId);
-  return { amount, senderId, receiverIds, senderNewBalance };
+  const row = await prisma.tokenBalance.findUnique({
+    where: { guildId_userId: { guildId, userId: senderId } },
+  });
+  return { amount, senderId, receiverIds, senderNewBalance: row?.balance ?? 0 };
 }
