@@ -10,10 +10,10 @@ const LINK_PATTERNS: Array<{
   // Lovense Standard API remote-control links (/t2/) and partner-control links (/c/)
   { pattern: /https?:\/\/api\.lovense-api\.com\/t2\/[^\s]+/i, provider: "lovense" },
   { pattern: /https?:\/\/lovense\.com\/c\/[^\s]+/i, provider: "lovense" },
-  // Handyfeeling session/connect links (path segment with session code, not root or static pages)
-  { pattern: /https?:\/\/handyfeeling\.com\/(?:sessions?|connect)\/[^\s]+/i, provider: "handyfeeling" },
-  // xtoys room/toy sharing links
-  { pattern: /https?:\/\/xtoys\.app\/(?:r|rooms?|toys?)\/[^\s]+/i, provider: "xtoys" },
+  // Handyfeeling session/connect links and legacy /remote?<code> format
+  { pattern: /https?:\/\/handyfeeling\.com\/(?:(?:sessions?|connect)\/[^\s]+|remote\?[^\s]+)/i, provider: "handyfeeling" },
+  // xtoys room/toy sharing links and legacy /session/<code> format
+  { pattern: /https?:\/\/xtoys\.app\/(?:r|rooms?|toys?|sessions?)\/[^\s]+/i, provider: "xtoys" },
 ];
 
 /**

@@ -30,12 +30,13 @@ async function callLovenseApi<T>(
   path: string,
   params: Record<string, string>,
 ): Promise<LovenseApiResponse<T>> {
-  const body = new URLSearchParams({ token: requireApiToken(), ...params });
+  const body = JSON.stringify({ token: requireApiToken(), ...params });
 
   let response: Response;
   try {
     response = await fetch(`${config.lovense.apiBaseUrl}${path}`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body,
     });
   } catch (error) {
