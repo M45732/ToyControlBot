@@ -1,0 +1,29 @@
+-- CreateTable
+CREATE TABLE "Raffle" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "messageId" TEXT NOT NULL,
+    "channelId" TEXT NOT NULL,
+    "guildId" TEXT NOT NULL,
+    "hostId" TEXT NOT NULL,
+    "linkUrl" TEXT NOT NULL,
+    "linkProvider" TEXT NOT NULL,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- CreateTable
+CREATE TABLE "RaffleParticipant" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "raffleId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    CONSTRAINT "RaffleParticipant_raffleId_fkey" FOREIGN KEY ("raffleId") REFERENCES "Raffle" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Raffle_messageId_key" ON "Raffle"("messageId");
+
+-- CreateIndex
+CREATE INDEX "Raffle_guildId_active_idx" ON "Raffle"("guildId", "active");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "RaffleParticipant_raffleId_userId_key" ON "RaffleParticipant"("raffleId", "userId");

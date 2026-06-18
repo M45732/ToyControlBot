@@ -51,12 +51,12 @@ Suggested build order. Later phases depend on earlier ones.
    first vertical slice through the new architecture). *(done)*
 4. **Lovense core** — config-driven Lovense client/service, QR pairing. *(done)*
 5. **Control sessions** — reaction-vote sessions (gangbang/orgy), session
-   persistence and restore-on-startup.
-6. **Tipping** — tip command + tip-mode sessions wired to economy + Lovense.
-7. **Control-link sharing & raffles**.
-8. **Dashboards** — member / performer / toy-control panels.
-9. **Channel & moderation helpers**.
-10. **Utility & owner commands**.
+   persistence and restore-on-startup. *(done)*
+6. **Tipping** — tip command + tip-mode sessions wired to economy + Lovense. *(done)*
+7. **Control-link sharing & raffles**. *(done)*
+8. **Dashboards** — member / performer / toy-control panels. *(done)*
+9. **Channel & moderation helpers**. *(done)*
+10. **Utility & owner commands**. *(done)*
 
 ## Foundation
 
@@ -88,56 +88,56 @@ Suggested build order. Later phases depend on earlier ones.
 
 | Old Feature | Old Location | Status | New Location | Notes |
 |---|---|---|---|---|
-| Lovense API client | `structures/commands/LovenseConnect.js`, `config/lovenseOptions.yml` | Migrated | `apps/bot/src/features/lovense/lovense.client.ts` | `requestQrCode` + `getToys` against the typed API. Token loaded from `LOVENSE_API_TOKEN` env var, never YAML. Vibration command sending (`LovenseConnect_send`) is deferred to the control-sessions phase, which needs it |
+| Lovense API client | `structures/commands/LovenseConnect.js`, `config/lovenseOptions.yml` | Migrated | `apps/bot/src/features/lovense/lovense.client.ts` | `requestQrCode` + `getToys` + `sendVibrate` against the typed API. Token loaded from `LOVENSE_API_TOKEN` env var, never YAML |
 | QR pairing | `structures/commands/toyControl.js` (`Lovense_create_qr_embed`) | Migrated | `apps/bot/src/features/lovense/` | `/toy-connect` slash command shows the pairing QR + code as an ephemeral embed |
-| Toy connection status | `structures/commands/LovenseConnect.js` (`LovenseConnect_GetConnectedToys`) | Migrated | `apps/bot/src/features/lovense/` | `/toy-status` slash command; new feature (legacy only used this internally before starting a session) |
-| Control sessions (reaction vote) | `structures/commands/toyControl.js` | Planned | `apps/bot/src/features/lovense/` | gangbang (solo), orgy (group); emoji 1–5 votes drive intensity. Tables `toycontrol`, `toycontrol_user` |
-| Session restore on startup | `events/ready/ready.js` | Planned | `apps/bot/src/features/lovense/` | Reload active sessions, clean orphaned ones |
-| Vibration patterns | `assets/patterns/**` | Not started | TBD | Pattern files exist but were never parsed in legacy. Decide whether to implement |
-| Toy emoji mapping | env `EMOJI_*` | Planned | `apps/bot/src/features/lovense/` | Map toy types to guild emojis |
+| Toy connection status | `structures/commands/LovenseConnect.js` (`LovenseConnect_GetConnectedToys`) | Migrated | `apps/bot/src/features/lovense/` | `/toy-status` slash command |
+| Control sessions (reaction vote) | `structures/commands/toyControl.js` | Migrated | `apps/bot/src/features/lovense/session.*.ts` | `/toy-session mode:gangbang\|orgy`. 5-second vote loop. Leave/join buttons. Prisma models `ToyControl`, `ToyControlUser` |
+| Session restore on startup | `events/ready/ready.js` | Migrated | `apps/bot/src/events/ready.event.ts` | Calls `restoreActiveSessions()` on ready; orphaned sessions cleaned up |
+| Vibration patterns | `assets/patterns/**` | Skipped | — | Pattern files were never parsed in legacy. Not implementing in the new bot |
+| Toy emoji mapping | env `EMOJI_*` | Skipped | — | Not required for the core vote-level UX |
 
 ## Tipping
 
 | Old Feature | Old Location | Status | New Location | Notes |
 |---|---|---|---|---|
-| Tip command | `commands/lovense/tip.js` | Planned | `apps/bot/src/features/tipping/` | Move tokens sender→receiver, trigger toy, record history. Needs active tip session |
-| Tip menu setup | `commands/lovense/setup-tip-menu.js` | Planned | `apps/bot/src/features/tipping/` | 5 levels: intensity/duration/power select menus |
-| Tip menu entry | `commands/lovense/setup-tip-menu-entry.js` | Not started | `apps/bot/src/features/tipping/` | Per-level subcommands; legacy partial |
+| Tip command | `commands/lovense/tip.js` | Migrated | `apps/bot/src/features/tipping/` | `/tip amount message`. Deducts from sender, credits each session participant, triggers toy. Requires active `/toy-session` in channel |
+| Tip menu setup | `commands/lovense/setup-tip-menu.js` | Skipped | — | Legacy was incomplete; the new tip flow is triggered directly via `/tip` |
+| Tip menu entry | `commands/lovense/setup-tip-menu-entry.js` | Skipped | — | Legacy partial; skipped in favour of direct `/tip` |
 
 ## Control-link sharing & raffles
 
 | Old Feature | Old Location | Status | New Location | Notes |
 |---|---|---|---|---|
-| Control link parsing | `handlers/messageControlLink.js` | Planned | `apps/bot/src/features/control-link/` | Parse handyfeeling / xtoys / lovense links, extract toys/time/tags |
-| Raffle / winner selection | `events/interaction/interactionCreate.js` | Planned | `apps/bot/src/features/control-link/` | Countdown, collect participants, DM winner |
-| Restrict toy links to channels | `events/message/messageCreate.js` | Planned | `apps/bot/src/features/control-link/` (or moderation) | Block `lovense-api.com/t2/` links outside allowed channels |
+| Control link parsing | `handlers/messageControlLink.js` | Migrated | `apps/bot/src/features/control-link/` | Detects lovense / handyfeeling / xtoys links in messages via `messageCreate` event |
+| Raffle / winner selection | `events/interaction/interactionCreate.js` | Migrated | `apps/bot/src/features/control-link/` | Enter Raffle + Pick Winner buttons; winner DMed the link |
+| Restrict toy links to channels | `events/message/messageCreate.js` | Migrated | `apps/bot/src/events/messageCreate.event.ts` | Set `CHAN_ID_TOY_LINK`; links outside that channel are deleted and the author is DMed |
 
 ## Dashboards / panels
 
 | Old Feature | Old Location | Status | New Location | Notes |
 |---|---|---|---|---|
-| Member dashboard | `commands/owner/setup-member-dashboard.js`, `structures/commands/tokenPanel.js` | Planned | `apps/bot/src/features/dashboards/` | Token buy/balance/history + subscription buttons |
-| Performer dashboard | `commands/owner/setup-performer-dashboard.js`, `structures/commands/performerPanel.js` | Planned | `apps/bot/src/features/dashboards/` | Home / Tip / Vote / Link / Subscription navigation |
-| Toy-control dashboard | `commands/owner/setup-toycontrol-dashboard.js` | Planned | `apps/bot/src/features/dashboards/` | Start gangbang / orgy entry points |
+| Member dashboard | `commands/owner/setup-member-dashboard.js`, `structures/commands/tokenPanel.js` | Migrated | `apps/bot/src/features/dashboards/` | `/setup-member-dashboard` — token balance/daily/toplist buttons |
+| Performer dashboard | `commands/owner/setup-performer-dashboard.js`, `structures/commands/performerPanel.js` | Migrated | `apps/bot/src/features/dashboards/` | `/setup-performer-dashboard` — start-session + connect-toy buttons |
+| Toy-control dashboard | `commands/owner/setup-toycontrol-dashboard.js` | Migrated | `apps/bot/src/features/dashboards/` | `/setup-toycontrol-dashboard` — gangbang / orgy entry points |
 
 ## Channel & moderation helpers
 
 | Old Feature | Old Location | Status | New Location | Notes |
 |---|---|---|---|---|
-| Block member from channel | `commands/channel/channel-block-member.js` | Not started | `apps/bot/src/features/channel/` | Legacy stub |
-| Invite performer | `commands/channel/channel-invite-performer.js` | Not started | `apps/bot/src/features/channel/` | Legacy stub |
-| Remove performer | `commands/channel/channel-remove-performer.js` | Not started | `apps/bot/src/features/channel/` | Legacy stub |
-| DM handling | `handlers/dmMessage.js` | Not started | TBD | Referenced but unimplemented in legacy; clarify intent before building |
+| Block member from channel | `commands/channel/channel-block-member.js` | Migrated | `apps/bot/src/features/channel/` | `/channel-block member` — sets `ViewChannel: false` permission override |
+| Invite performer | `commands/channel/channel-invite-performer.js` | Migrated | `apps/bot/src/features/channel/` | `/channel-invite-performer member` — grants `ViewChannel + SendMessages` |
+| Remove performer | `commands/channel/channel-remove-performer.js` | Migrated | `apps/bot/src/features/channel/` | `/channel-remove-performer member` — removes permission override |
+| DM handling | `handlers/dmMessage.js` | Skipped | — | Unimplemented in legacy; intent unclear |
 
 ## Utility & owner commands
 
 | Old Feature | Old Location | Status | New Location | Notes |
 |---|---|---|---|---|
-| ping | `commands/util/ping.js` | Planned | `apps/bot/src/features/utility/` | Gateway + interaction latency. Drop the odd `BanMembers` gate |
-| help | `commands/util/help.js` | Planned | `apps/bot/src/features/utility/` | Generate from command registry |
-| version | `commands/owner/version.js` | Planned | `apps/bot/src/features/owner/` | Read from package.json |
-| restart | `commands/owner/restart.js` | Planned | `apps/bot/src/features/owner/` | Owner-only; rely on process manager to restart |
-| Command deploy/remove (prefix) | `events/message/messageCreate.js` (`!deploy-*`, `!remove-*`) | Replaced | deploy script / owner command | Replace `!`-prefix owner commands with a script or slash command |
+| ping | `commands/util/ping.js` | Migrated | `apps/bot/src/features/utility/` | `/ping` — round-trip + WebSocket latency. `BanMembers` gate dropped |
+| help | `commands/util/help.js` | Migrated | `apps/bot/src/features/utility/` | `/help` — auto-generated from command registry |
+| version | `commands/owner/version.js` | Migrated | `apps/bot/src/features/owner/` | `/version` — reads from `package.json` |
+| restart | `commands/owner/restart.js` | Migrated | `apps/bot/src/features/owner/` | `/restart` — owner-only; `process.exit(0)` for process manager restart |
+| Command deploy/remove (prefix) | `events/message/messageCreate.js` (`!deploy-*`, `!remove-*`) | Replaced | `npm run deploy-commands` | Replaced by the existing `deploy-commands` script |
 
 ## Per-feature behavior notes
 

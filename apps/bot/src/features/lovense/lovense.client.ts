@@ -30,12 +30,13 @@ async function callLovenseApi<T>(
   path: string,
   params: Record<string, string>,
 ): Promise<LovenseApiResponse<T>> {
-  const body = new URLSearchParams({ token: requireApiToken(), ...params });
+  const body = JSON.stringify({ token: requireApiToken(), ...params });
 
   let response: Response;
   try {
     response = await fetch(`${config.lovense.apiBaseUrl}${path}`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body,
     });
   } catch (error) {
@@ -73,5 +74,31 @@ export function getToys(
   return callLovenseApi<Record<string, LovenseToy>>("/api/lan/command", {
     uid,
     command: "GetToys",
+  });
+}
+
+/**
+ * Send a vibration command to a user's connected toys.
+ *
+ * Uses the Standard API v2 Function command. Level 0 = off, 20 = max.
+ * timeSec defaults to 0 (run until the next command overrides it); pass a
+ * positive value to let Lovense auto-stop after that many seconds.
+ *
+ * @param uid     Discord user ID
+ * @param level   Vibration level 0–20
+ * @param timeSec Duration in seconds (0 = indefinite)
+ */
+export function sendVibrate(
+  uid: string,
+  level: number,
+  timeSec = 0,
+): Promise<LovenseApiResponse<unknown>> {
+  const clamped = Math.round(Math.max(0, Math.min(20, level)));
+  return callLovenseApi<unknown>("/api/lan/v2/command", {
+    uid,
+    command: "Function",
+    action: `Vibrate:${clamped}`,
+    timeSec: String(timeSec),
+    apiVer: "1",
   });
 }

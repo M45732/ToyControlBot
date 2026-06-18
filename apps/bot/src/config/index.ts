@@ -38,6 +38,16 @@ export interface LovenseConfig {
   readonly apiBaseUrl: string;
 }
 
+export interface ControlLinkConfig {
+  /** Channel where toy-control links are allowed. Links posted elsewhere are deleted. */
+  readonly allowedChannelId?: string;
+}
+
+export interface OwnerConfig {
+  /** Discord user ID of the bot owner, for owner-only commands. */
+  readonly ownerId?: string;
+}
+
 export interface RuntimeConfig {
   readonly nodeEnv: NodeEnv;
   readonly logLevel: LogLevel;
@@ -50,6 +60,8 @@ export interface AppConfig {
   readonly runtime: RuntimeConfig;
   readonly economy: EconomyConfig;
   readonly lovense: LovenseConfig;
+  readonly controlLink: ControlLinkConfig;
+  readonly owner: OwnerConfig;
 }
 
 function parseNodeEnv(value: string | undefined): NodeEnv {
@@ -101,6 +113,12 @@ function loadConfig(): AppConfig {
         "LOVENSE_API_BASE_URL",
         "https://api.lovense-api.com",
       )!,
+    },
+    controlLink: {
+      allowedChannelId: getOptionalEnv("CHAN_ID_TOY_LINK"),
+    },
+    owner: {
+      ownerId: getOptionalEnv("OWNER_DISCORD_ID"),
     },
   };
 }
