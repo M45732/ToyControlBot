@@ -2,6 +2,7 @@ import {
   BaseGuildTextChannel,
   Events,
   type Message,
+  ThreadChannel,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -28,7 +29,13 @@ export const messageCreateEvent = defineEvent({
 
     const { allowedChannelId } = config.controlLink;
 
-    if (allowedChannelId && message.channelId !== allowedChannelId) {
+    // Accept the configured channel itself AND threads whose parent is that channel,
+    // mirroring the legacy bot behaviour (legacy/old-bot-readonly/events/message/messageCreate.js:90-92).
+    const isInAllowedChannel =
+      message.channelId === allowedChannelId ||
+      (message.channel instanceof ThreadChannel && message.channel.parentId === allowedChannelId);
+
+    if (allowedChannelId && !isInAllowedChannel) {
       let deleted = false;
       await message.delete()
         .then(() => { deleted = true; })
@@ -68,7 +75,7 @@ export const messageCreateEvent = defineEvent({
         .setStyle(ButtonStyle.Success),
     );
 
-    if (!(message.channel instanceof BaseGuildTextChannel)) return;
+    if (!(message.channel instanceof BaseGuildTextChannel) && !(message.channel instanceof ThreadChannel)) return;
 
     // Delete the original message before posting the raffle so the URL is never
     // visible to non-winners. If we lack Manage Messages permission, abort: running

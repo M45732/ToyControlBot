@@ -65,65 +65,76 @@ export async function getRaffle(
  * Attempt to join a raffle. Returns null if the raffle is no longer active,
  * or an object indicating whether the user was newly added and the current
  * participant count.
+ *
+ * The find and insert run inside a transaction so a concurrent pickWinner
+ * that marks the raffle inactive cannot slip between them — the user won't
+ * be told they entered when they weren't actually in the winner pool.
  */
 export async function joinRaffle(
   raffleMessageId: string,
   userId: string,
 ): Promise<{ joined: boolean; participantCount: number } | null> {
-  const raffle = await prisma.raffle.findUnique({
-    where: { messageId: raffleMessageId, active: true },
-    select: { id: true },
-  });
-  if (!raffle) return null;
+  return prisma.$transaction(async (tx) => {
+    const raffle = await tx.raffle.findUnique({
+      where: { messageId: raffleMessageId, active: true },
+      select: { id: true },
+    });
+    if (!raffle) return null;
 
-  let joined = false;
-  try {
-    await prisma.raffleParticipant.create({ data: { raffleId: raffle.id, userId } });
-    joined = true;
-  } catch {
-    // unique constraint — user already entered
-  }
+    let joined = false;
+    try {
+      await tx.raffleParticipant.create({ data: { raffleId: raffle.id, userId } });
+      joined = true;
+    } catch {
+      // unique constraint — user already entered
+    }
 
-  const updated = await prisma.raffle.findUnique({
-    where: { id: raffle.id },
-    select: { _count: { select: { participants: true } } },
+    const updated = await tx.raffle.findUnique({
+      where: { id: raffle.id },
+      select: { _count: { select: { participants: true } } },
+    });
+    return { joined, participantCount: updated?._count.participants ?? 0 };
   });
-  return { joined, participantCount: updated?._count.participants ?? 0 };
 }
 
 /**
- * Pick a random winner, mark the raffle inactive, and return the winner plus
- * the control link. Returns null if nobody has entered — raffle stays active.
+ * Pick a random winner and return them with the control link.
+ * Returns null if nobody has entered — raffle stays active.
+ *
+ * The entire operation runs inside a transaction. The conditional updateMany
+ * (WHERE active=true) means only one of two concurrent Pick Winner clicks
+ * gets count=1 and proceeds; the other returns null without announcing a
+ * second winner. The raffle row is deleted on completion so the private URL
+ * is not retained in database backups.
  */
 export async function pickWinner(
   raffleMessageId: string,
 ): Promise<{ winnerId: string; link: ParsedControlLink } | null> {
-  const raffle = await prisma.raffle.findUnique({
-    where: { messageId: raffleMessageId, active: true },
-    include: { participants: true },
-  });
-  if (!raffle || raffle.participants.length === 0) return null;
+  return prisma.$transaction(async (tx) => {
+    const raffle = await tx.raffle.findUnique({
+      where: { messageId: raffleMessageId, active: true },
+      include: { participants: true },
+    });
+    if (!raffle || raffle.participants.length === 0) return null;
 
-  // Claim atomically: the conditional WHERE active:true means only one of two
-  // concurrent Pick Winner clicks will get count=1; the other gets count=0 and
-  // returns null, preventing a second winner from being announced/DM'd.
-  const claim = await prisma.raffle.updateMany({
-    where: { id: raffle.id, active: true },
-    data: { active: false },
-  });
-  if (claim.count === 0) return null;
+    const claim = await tx.raffle.updateMany({
+      where: { id: raffle.id, active: true },
+      data: { active: false },
+    });
+    if (claim.count === 0) return null;
 
-  const participants = raffle.participants.map((p) => p.userId);
-  const winnerId = participants[Math.floor(Math.random() * participants.length)]!;
-  return {
-    winnerId,
-    link: { url: raffle.linkUrl, provider: raffle.linkProvider as ParsedControlLink["provider"] },
-  };
+    // Delete row (cascade removes participants) — no need to retain the URL.
+    await tx.raffle.delete({ where: { id: raffle.id } });
+
+    const participants = raffle.participants.map((p) => p.userId);
+    const winnerId = participants[Math.floor(Math.random() * participants.length)]!;
+    return {
+      winnerId,
+      link: { url: raffle.linkUrl, provider: raffle.linkProvider as ParsedControlLink["provider"] },
+    };
+  });
 }
 
 export async function deleteRaffle(raffleMessageId: string): Promise<void> {
-  await prisma.raffle.updateMany({
-    where: { messageId: raffleMessageId },
-    data: { active: false },
-  });
+  await prisma.raffle.deleteMany({ where: { messageId: raffleMessageId } });
 }

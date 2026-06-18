@@ -3,6 +3,7 @@ import {
   Events,
   type Message,
   type PartialMessage,
+  ThreadChannel,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -32,7 +33,11 @@ export const messageUpdateEvent = defineEvent({
 
     const { allowedChannelId } = config.controlLink;
 
-    if (allowedChannelId && message.channelId !== allowedChannelId) {
+    const isInAllowedChannel =
+      message.channelId === allowedChannelId ||
+      (message.channel instanceof ThreadChannel && message.channel.parentId === allowedChannelId);
+
+    if (allowedChannelId && !isInAllowedChannel) {
       let deleted = false;
       await message.delete()
         .then(() => { deleted = true; })
@@ -50,7 +55,7 @@ export const messageUpdateEvent = defineEvent({
       return;
     }
 
-    if (!(message.channel instanceof BaseGuildTextChannel)) return;
+    if (!(message.channel instanceof BaseGuildTextChannel) && !(message.channel instanceof ThreadChannel)) return;
 
     let deleted = false;
     await message.delete().then(() => { deleted = true; }).catch((err: unknown) =>
