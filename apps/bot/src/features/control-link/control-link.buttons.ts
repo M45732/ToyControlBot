@@ -65,7 +65,7 @@ const endRaffleHandler: ButtonHandler = {
       );
     } catch {
       await interaction.followUp({
-        content: `Could not DM <@${winnerId}> — they may have DMs disabled. Please share the link manually.`,
+        content: `Could not DM <@${winnerId}> — they may have DMs disabled. Share the link with them directly:\n${raffle.link.url}`,
         ephemeral: true,
       });
     }

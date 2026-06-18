@@ -114,17 +114,14 @@ export async function executeTip(
     return { amount, senderId, receiverIds, senderNewBalance: row?.balance ?? 0 };
   });
 
+  // Use a timed Lovense command so the tip burst auto-stops after the window
+  // without a separate setTimeout that could fire after a newer session command.
+  const tipDurationSec = Math.round(TIP_VIBRATION_DURATION_MS / 1000);
   for (const uid of result.receiverIds) {
-    sendVibrate(uid, TIP_VIBRATION_LEVEL).catch((err: unknown) =>
+    sendVibrate(uid, TIP_VIBRATION_LEVEL, tipDurationSec).catch((err: unknown) =>
       log.warn({ err, uid }, "Tip vibrate failed"),
     );
   }
-
-  setTimeout(() => {
-    for (const uid of result.receiverIds) {
-      sendVibrate(uid, 0).catch(() => undefined);
-    }
-  }, TIP_VIBRATION_DURATION_MS);
 
   return result;
 }
