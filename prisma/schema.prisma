@@ -82,6 +82,33 @@ model ToyControlUser {
   @@unique([sessionId, userId])
 }
 
+/// A control-link raffle posted in a guild channel.
+/// The link URL is stored here so the raffle survives bot restarts.
+model Raffle {
+  id           String              @id @default(cuid())
+  messageId    String              @unique
+  channelId    String
+  guildId      String
+  hostId       String
+  linkUrl      String
+  linkProvider String
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  participants RaffleParticipant[]
+
+  @@index([guildId, active])
+}
+
+/// A user who has entered a Raffle.
+model RaffleParticipant {
+  id       String @id @default(cuid())
+  raffleId String
+  userId   String
+  raffle   Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@unique([raffleId, userId])
+}
+
 /// A tip transaction recorded during a toy-control tip session.
 model TipHistory {
   id         String   @id @default(cuid())

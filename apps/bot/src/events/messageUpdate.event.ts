@@ -94,8 +94,8 @@ export const messageUpdateEvent = defineEvent({
       return;
     }
 
-    if (!message.author) return;
-    createRaffle(raffleMsg.id, message.channelId, link, message.author.id);
+    if (!message.author || !message.guildId) return;
+    await createRaffle(raffleMsg.id, message.channelId, message.guildId, link, message.author.id);
 
     const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()

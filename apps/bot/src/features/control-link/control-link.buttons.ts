@@ -14,17 +14,16 @@ const joinRaffleHandler: ButtonHandler = {
     }
 
     const raffleMessageId = interaction.customId.slice("raffle:join:".length);
-    const raffle = getRaffle(raffleMessageId);
+    const result = await joinRaffle(raffleMessageId, interaction.user.id);
 
-    if (!raffle) {
+    if (!result) {
       await interaction.reply({ content: "This raffle has already ended.", ephemeral: true });
       return;
     }
 
-    const joined = joinRaffle(raffleMessageId, interaction.user.id);
     await interaction.reply({
-      content: joined
-        ? `You entered the raffle! (${raffle.participants.size} participant(s))`
+      content: result.joined
+        ? `You entered the raffle! (${result.participantCount} participant(s))`
         : "You're already in this raffle.",
       ephemeral: true,
     });
@@ -41,7 +40,7 @@ const endRaffleHandler: ButtonHandler = {
     }
 
     const raffleMessageId = interaction.customId.slice("raffle:end:".length);
-    const raffle = getRaffle(raffleMessageId);
+    const raffle = await getRaffle(raffleMessageId);
 
     if (!raffle) {
       throw new UserFacingError("This raffle has already ended.");
@@ -50,7 +49,7 @@ const endRaffleHandler: ButtonHandler = {
       throw new UserFacingError("Only the raffle host can end it.");
     }
 
-    const result = pickWinner(raffleMessageId);
+    const result = await pickWinner(raffleMessageId);
     if (!result) {
       // Raffle stays active — reply privately so the public embed is untouched.
       await interaction.reply({ content: "No one has entered yet. The raffle is still open.", ephemeral: true });

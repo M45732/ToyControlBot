@@ -313,9 +313,18 @@ async function runVoteTick(
     const tick = (tickCounters.get(messageId) ?? 0) + 1;
     tickCounters.set(messageId, tick);
     if (tick % VOTE_RESET_TICKS === 0) {
-      await message.reactions.removeAll().catch(() => undefined);
-      for (const emoji of VOTE_EMOJIS) {
-        await message.react(emoji).catch(() => undefined);
+      // removeAll requires MANAGE_MESSAGES; if it fails, skip re-adding reactions
+      // (pointless without a clean slate) and surface the warning so admins can fix permissions.
+      const cleared = await message.reactions.removeAll()
+        .then(() => true)
+        .catch((err: unknown) => {
+          log.warn({ err, messageId }, "Reaction reset failed — bot may lack MANAGE_MESSAGES; stale votes will persist");
+          return false;
+        });
+      if (cleared) {
+        for (const emoji of VOTE_EMOJIS) {
+          await message.react(emoji).catch(() => undefined);
+        }
       }
     }
   } catch (err) {

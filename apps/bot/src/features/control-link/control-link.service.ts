@@ -1,7 +1,5 @@
-import type { ActiveRaffle, ParsedControlLink } from "./control-link.types.js";
-
-/** In-memory raffle state keyed by raffle message ID */
-const activeRaffles = new Map<string, ActiveRaffle>();
+import { prisma } from "../../services/database.service.js";
+import type { ParsedControlLink } from "./control-link.types.js";
 
 const LINK_PATTERNS: Array<{
   pattern: RegExp;
@@ -30,49 +28,95 @@ export function detectControlLink(content: string): ParsedControlLink | null {
   return null;
 }
 
-export function createRaffle(
+export async function createRaffle(
   raffleMessageId: string,
   channelId: string,
+  guildId: string,
   link: ParsedControlLink,
   hostId: string,
-): ActiveRaffle {
-  const raffle: ActiveRaffle = {
-    messageId: raffleMessageId,
-    channelId,
-    link,
-    participants: new Set(),
-    hostId,
-  };
-  activeRaffles.set(raffleMessageId, raffle);
-  return raffle;
-}
-
-export function getRaffle(raffleMessageId: string): ActiveRaffle | undefined {
-  return activeRaffles.get(raffleMessageId);
-}
-
-export function joinRaffle(raffleMessageId: string, userId: string): boolean {
-  const raffle = activeRaffles.get(raffleMessageId);
-  if (!raffle || raffle.participants.has(userId)) return false;
-  raffle.participants.add(userId);
-  return true;
+): Promise<void> {
+  await prisma.raffle.create({
+    data: {
+      messageId: raffleMessageId,
+      channelId,
+      guildId,
+      hostId,
+      linkUrl: link.url,
+      linkProvider: link.provider,
+    },
+  });
 }
 
 /**
- * Pick a random winner, remove the raffle from memory, and return the winner
- * plus the control link. Returns null if nobody entered — raffle stays active.
+ * Returns basic raffle info if the raffle is still active, null otherwise.
  */
-export function pickWinner(
+export async function getRaffle(
   raffleMessageId: string,
-): { winnerId: string; link: ParsedControlLink } | null {
-  const raffle = activeRaffles.get(raffleMessageId);
-  if (!raffle || raffle.participants.size === 0) return null;
-  activeRaffles.delete(raffleMessageId);
-  const participants = [...raffle.participants];
-  const winnerId = participants[Math.floor(Math.random() * participants.length)]!;
-  return { winnerId, link: raffle.link };
+): Promise<{ hostId: string; participantCount: number } | null> {
+  const raffle = await prisma.raffle.findUnique({
+    where: { messageId: raffleMessageId, active: true },
+    select: { hostId: true, _count: { select: { participants: true } } },
+  });
+  if (!raffle) return null;
+  return { hostId: raffle.hostId, participantCount: raffle._count.participants };
 }
 
-export function deleteRaffle(raffleMessageId: string): void {
-  activeRaffles.delete(raffleMessageId);
+/**
+ * Attempt to join a raffle. Returns null if the raffle is no longer active,
+ * or an object indicating whether the user was newly added and the current
+ * participant count.
+ */
+export async function joinRaffle(
+  raffleMessageId: string,
+  userId: string,
+): Promise<{ joined: boolean; participantCount: number } | null> {
+  const raffle = await prisma.raffle.findUnique({
+    where: { messageId: raffleMessageId, active: true },
+    select: { id: true },
+  });
+  if (!raffle) return null;
+
+  let joined = false;
+  try {
+    await prisma.raffleParticipant.create({ data: { raffleId: raffle.id, userId } });
+    joined = true;
+  } catch {
+    // unique constraint — user already entered
+  }
+
+  const updated = await prisma.raffle.findUnique({
+    where: { id: raffle.id },
+    select: { _count: { select: { participants: true } } },
+  });
+  return { joined, participantCount: updated?._count.participants ?? 0 };
+}
+
+/**
+ * Pick a random winner, mark the raffle inactive, and return the winner plus
+ * the control link. Returns null if nobody has entered — raffle stays active.
+ */
+export async function pickWinner(
+  raffleMessageId: string,
+): Promise<{ winnerId: string; link: ParsedControlLink } | null> {
+  const raffle = await prisma.raffle.findUnique({
+    where: { messageId: raffleMessageId, active: true },
+    include: { participants: true },
+  });
+  if (!raffle || raffle.participants.length === 0) return null;
+
+  await prisma.raffle.update({ where: { id: raffle.id }, data: { active: false } });
+
+  const participants = raffle.participants.map((p) => p.userId);
+  const winnerId = participants[Math.floor(Math.random() * participants.length)]!;
+  return {
+    winnerId,
+    link: { url: raffle.linkUrl, provider: raffle.linkProvider as ParsedControlLink["provider"] },
+  };
+}
+
+export async function deleteRaffle(raffleMessageId: string): Promise<void> {
+  await prisma.raffle.updateMany({
+    where: { messageId: raffleMessageId },
+    data: { active: false },
+  });
 }
