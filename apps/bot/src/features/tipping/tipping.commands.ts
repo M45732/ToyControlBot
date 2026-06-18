@@ -28,7 +28,11 @@ const tipCommand: SlashCommand = {
     await requireGuildMember(interaction);
 
     const amount = interaction.options.getInteger("amount", true);
-    const tipMessage = interaction.options.getString("message") ?? undefined;
+    const rawMessage = interaction.options.getString("message") ?? undefined;
+    // Cap before committing so the public announcement never exceeds Discord's limit.
+    const tipMessage = rawMessage && rawMessage.length > 200
+      ? `${rawMessage.slice(0, 197)}...`
+      : rawMessage;
 
     // Defer ephemerally so any error (e.g. insufficient balance) stays private.
     await interaction.deferReply({ ephemeral: true });

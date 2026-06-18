@@ -256,6 +256,17 @@ async function runVoteTick(
       ? parseInt(winner.emoji.charAt(0))
       : 0;
 
+    // Recheck activity immediately before sending commands — an end/leave that
+    // overlapped this tick may have already sent level-0 and stopped the loop.
+    const stillActive = await prisma.toyControl.findUnique({
+      where: { id: sessionId },
+      select: { active: true },
+    });
+    if (!stillActive?.active) {
+      stopVoteLoop(messageId);
+      return;
+    }
+
     const userIds = session.participants.map((p) => p.userId);
     for (const uid of userIds) {
       await sendVibrate(uid, levelToVibration(votedLevel)).catch((err: unknown) =>

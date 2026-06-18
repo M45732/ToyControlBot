@@ -19,10 +19,9 @@ export interface TipResult {
  * Execute a tip atomically: check and deduct sender balance, credit each session
  * participant (distributing the full amount with no rounding loss), trigger toy.
  *
- * All balance moves and history writes run inside a single transaction so a
- * partial failure cannot leave the sender debited without receivers credited.
- * The conditional WHERE on `balance >= amount` prevents concurrent tips from
- * the same user from both succeeding when only one has sufficient funds.
+ * The session lookup, balance check, debit, credits, and history writes all run
+ * inside a single transaction. Moving the session lookup inside prevents a race
+ * where the session ends between the preflight check and the balance debit.
  */
 export async function executeTip(
   guildId: string,
@@ -31,28 +30,28 @@ export async function executeTip(
   amount: number,
   tipMessage?: string,
 ): Promise<TipResult> {
-  const session = await prisma.toyControl.findFirst({
-    where: { guildId, channelId, active: true },
-    include: { participants: true },
-  });
-
-  if (!session) {
-    throw new UserFacingError(
-      "There is no active toy control session in this channel. Start one with /toy-session first.",
-    );
-  }
-
-  // Exclude the sender so tips actually transfer tokens between users.
-  // If the sender is the only participant (solo session), reject the tip.
-  const receiverIds = session.participants
-    .map((p) => p.userId)
-    .filter((id) => id !== senderId);
-
-  if (receiverIds.length === 0) {
-    throw new UserFacingError("You cannot tip a session you are participating in.");
-  }
-
   const result = await prisma.$transaction(async (tx) => {
+    const session = await tx.toyControl.findFirst({
+      where: { guildId, channelId, active: true },
+      include: { participants: true },
+    });
+
+    if (!session) {
+      throw new UserFacingError(
+        "There is no active toy control session in this channel. Start one with /toy-session first.",
+      );
+    }
+
+    // Exclude the sender so tips actually transfer tokens between users.
+    // If the sender is the only participant (solo session), reject the tip.
+    const receiverIds = session.participants
+      .map((p) => p.userId)
+      .filter((id) => id !== senderId);
+
+    if (receiverIds.length === 0) {
+      throw new UserFacingError("You cannot tip a session you are participating in.");
+    }
+
     // Atomically check balance and deduct. The conditional WHERE on `balance >= amount`
     // means a concurrent tip that races here will get count=0 and we throw, preventing
     // the balance from going negative.
@@ -115,14 +114,14 @@ export async function executeTip(
     return { amount, senderId, receiverIds, senderNewBalance: row?.balance ?? 0 };
   });
 
-  for (const uid of receiverIds) {
+  for (const uid of result.receiverIds) {
     sendVibrate(uid, TIP_VIBRATION_LEVEL).catch((err: unknown) =>
       log.warn({ err, uid }, "Tip vibrate failed"),
     );
   }
 
   setTimeout(() => {
-    for (const uid of receiverIds) {
+    for (const uid of result.receiverIds) {
       sendVibrate(uid, 0).catch(() => undefined);
     }
   }, TIP_VIBRATION_DURATION_MS);
