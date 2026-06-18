@@ -42,31 +42,32 @@ const joinHandler: ButtonHandler = {
 
     const messageId = interaction.customId.slice("session:join:".length);
 
+    // Acknowledge immediately — Lovense and DB calls below can be slow.
+    await interaction.deferReply({ ephemeral: true });
+
     const toyStatus = await getConnectedToys(interaction.user.id);
     if (toyStatus.state === "app-offline") {
-      throw new UserFacingError(
+      await interaction.editReply(
         "Your Lovense app is offline. Start the app, connect your toy, then try again.",
       );
+      return;
     }
     if (toyStatus.state === "no-toys") {
-      throw new UserFacingError(
+      await interaction.editReply(
         "No toy is connected to your Lovense app. Connect a toy then try again.",
       );
+      return;
     }
 
     const joined = await joinSession(messageId, interaction.user.id);
     if (!joined) {
-      await interaction.reply({
-        content: "You're already in this session or it has ended.",
-        ephemeral: true,
-      });
+      await interaction.editReply("You're already in this session or it has ended.");
       return;
     }
 
-    await interaction.reply({
-      content: "You joined the session! React with 0️⃣–5️⃣ to vote the vibration level.",
-      ephemeral: true,
-    });
+    await interaction.editReply(
+      "You joined the session! React with 0️⃣–5️⃣ to vote the vibration level.",
+    );
   },
 };
 

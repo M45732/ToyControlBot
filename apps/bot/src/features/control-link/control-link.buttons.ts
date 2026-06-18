@@ -47,7 +47,8 @@ const endRaffleHandler: ButtonHandler = {
 
     const winnerId = pickWinner(raffleMessageId);
     if (!winnerId) {
-      await interaction.reply({ content: "No one entered the raffle.", ephemeral: false });
+      // Raffle stays active — reply privately so the public embed is untouched.
+      await interaction.reply({ content: "No one has entered yet. The raffle is still open.", ephemeral: true });
       return;
     }
 

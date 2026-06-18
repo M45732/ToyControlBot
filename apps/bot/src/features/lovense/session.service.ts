@@ -267,7 +267,14 @@ async function runVoteTick(
       return;
     }
 
-    const userIds = session.participants.map((p) => p.userId);
+    // Re-fetch current participants so a mid-tick leave doesn't vibrate a user
+    // who already had their toy stopped and their row deleted.
+    const currentParticipants = await prisma.toyControlUser.findMany({
+      where: { sessionId },
+      select: { userId: true },
+    });
+    const userIds = currentParticipants.map((p) => p.userId);
+
     for (const uid of userIds) {
       await sendVibrate(uid, levelToVibration(votedLevel)).catch((err: unknown) =>
         log.warn({ err, uid }, "Vibrate command failed"),
