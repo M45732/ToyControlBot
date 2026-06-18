@@ -14,12 +14,17 @@ const joinRaffleHandler: ButtonHandler = {
     }
 
     const raffleMessageId = interaction.customId.slice("raffle:join:".length);
-    const joined = joinRaffle(raffleMessageId, interaction.user.id);
     const raffle = getRaffle(raffleMessageId);
 
+    if (!raffle) {
+      await interaction.reply({ content: "This raffle has already ended.", ephemeral: true });
+      return;
+    }
+
+    const joined = joinRaffle(raffleMessageId, interaction.user.id);
     await interaction.reply({
       content: joined
-        ? `You entered the raffle! (${raffle?.participants.size ?? 1} participant(s))`
+        ? `You entered the raffle! (${raffle.participants.size} participant(s))`
         : "You're already in this raffle.",
       ephemeral: true,
     });

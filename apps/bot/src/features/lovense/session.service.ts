@@ -256,29 +256,23 @@ async function runVoteTick(
       return { emoji, count: Math.max(0, (reaction?.count ?? 1) - 1) };
     });
 
-    const winner = votes.reduce((a, b) => (b.count > a.count ? b : a));
+    const winner = votes.reduce((a, b) => (b.count >= a.count ? b : a));
     const votedLevel = votes.some((v) => v.count > 0)
       ? parseInt(winner.emoji.charAt(0))
       : 0;
 
-    // Recheck activity immediately before sending commands — an end/leave that
-    // overlapped this tick may have already sent level-0 and stopped the loop.
-    const stillActive = await prisma.toyControl.findUnique({
+    // Single query: recheck active AND get fresh participants in one round-trip.
+    // This catches end/leave that overlapped this tick and removes leavers whose
+    // rows were deleted mid-tick, replacing the previous two separate queries.
+    const freshState = await prisma.toyControl.findUnique({
       where: { id: sessionId },
-      select: { active: true },
+      select: { active: true, participants: { select: { userId: true } } },
     });
-    if (!stillActive?.active) {
+    if (!freshState?.active) {
       stopVoteLoop(messageId);
       return;
     }
-
-    // Re-fetch current participants so a mid-tick leave doesn't vibrate a user
-    // who already had their toy stopped and their row deleted.
-    const currentParticipants = await prisma.toyControlUser.findMany({
-      where: { sessionId },
-      select: { userId: true },
-    });
-    const userIds = currentParticipants.map((p) => p.userId);
+    const userIds = freshState.participants.map((p) => p.userId);
 
     for (const uid of userIds) {
       await sendVibrate(uid, levelToVibration(votedLevel)).catch((err: unknown) =>
@@ -336,11 +330,13 @@ export async function endSession(messageId: string): Promise<void> {
   stopVoteLoop(messageId);
 
   if (session) {
-    for (const { userId } of session.participants) {
-      await sendVibrate(userId, 0).catch((err: unknown) =>
-        log.warn({ err, userId }, "Failed to send stop vibration on session end"),
-      );
-    }
+    await Promise.all(
+      session.participants.map(({ userId }) =>
+        sendVibrate(userId, 0).catch((err: unknown) =>
+          log.warn({ err, userId }, "Failed to send stop vibration on session end"),
+        ),
+      ),
+    );
   }
 }
 
