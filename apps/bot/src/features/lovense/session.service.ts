@@ -20,8 +20,8 @@ const VOTE_INTERVAL_MS = 5_000;
 const VOTE_RESET_TICKS = 12; // clear reactions every 12 × 5 s = 60 s
 const VOTE_EMOJIS = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"] as const;
 
-/** In-memory registry: messageId → interval handle */
-const activeLoops = new Map<string, ReturnType<typeof setInterval>>();
+/** In-memory registry: messageId → timeout handle (self-scheduling, not interval) */
+const activeLoops = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Per-session tick counter for periodic reaction resets */
 const tickCounters = new Map<string, number>();
@@ -163,9 +163,16 @@ export async function startSession(
 
     const sessionMsg = await channel.send({ embeds: [embed], components: [placeholderRow] });
 
-    // Update buttons now that we have the real message ID (join button needs it)
+    // Update buttons now that we have the real message ID (join button needs it).
+    // If the edit fails the message is already visible but un-joinable; delete it
+    // so the channel isn't left with a broken session embed.
     if (mode === "orgy") {
-      await sessionMsg.edit({ components: [buildSessionRow(mode, sessionMsg.id)] });
+      try {
+        await sessionMsg.edit({ components: [buildSessionRow(mode, sessionMsg.id)] });
+      } catch (err) {
+        await sessionMsg.delete().catch(() => undefined);
+        throw err;
+      }
     }
 
     const session = await prisma.toyControl.create({
@@ -210,12 +217,19 @@ export function startVoteLoop(
   if (activeLoops.has(messageId)) return;
 
   tickCounters.set(messageId, 0);
-  const interval = setInterval(
-    () => void runVoteTick(client, sessionId, messageId, channelId),
-    VOTE_INTERVAL_MS,
-  );
-  activeLoops.set(messageId, interval);
   log.info({ messageId, sessionId }, "Vote loop started");
+
+  // Self-scheduling setTimeout prevents a new tick from starting before the
+  // previous one finishes — avoids stale vibrate commands from overlapping ticks.
+  const schedule = (): void => {
+    const handle = setTimeout(() => {
+      void runVoteTick(client, sessionId, messageId, channelId).finally(() => {
+        if (activeLoops.has(messageId)) schedule();
+      });
+    }, VOTE_INTERVAL_MS);
+    activeLoops.set(messageId, handle);
+  };
+  schedule();
 }
 
 async function runVoteTick(
@@ -253,7 +267,10 @@ async function runVoteTick(
 
     const votes = VOTE_EMOJIS.map((emoji) => {
       const reaction = message!.reactions.cache.get(emoji);
-      return { emoji, count: Math.max(0, (reaction?.count ?? 1) - 1) };
+      // Only subtract the bot's own reaction if it's confirmed present.
+      // If the bot failed to add the reaction, don't subtract from real votes.
+      const botOffset = reaction?.me ? 1 : 0;
+      return { emoji, count: Math.max(0, (reaction?.count ?? 0) - botOffset) };
     });
 
     const winner = votes.reduce((a, b) => (b.count >= a.count ? b : a));
@@ -343,7 +360,7 @@ export async function endSession(messageId: string): Promise<void> {
 function stopVoteLoop(messageId: string): void {
   const handle = activeLoops.get(messageId);
   if (handle !== undefined) {
-    clearInterval(handle);
+    clearTimeout(handle);
     activeLoops.delete(messageId);
     tickCounters.delete(messageId);
     log.info({ messageId }, "Vote loop stopped");

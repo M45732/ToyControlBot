@@ -59,15 +59,18 @@ export function joinRaffle(raffleMessageId: string, userId: string): boolean {
 }
 
 /**
- * Pick a random winner, remove the raffle from memory, and return the winner's userId.
- * Returns null if nobody entered — the raffle stays active so participants can still join.
+ * Pick a random winner, remove the raffle from memory, and return the winner
+ * plus the control link. Returns null if nobody entered — raffle stays active.
  */
-export function pickWinner(raffleMessageId: string): string | null {
+export function pickWinner(
+  raffleMessageId: string,
+): { winnerId: string; link: ParsedControlLink } | null {
   const raffle = activeRaffles.get(raffleMessageId);
   if (!raffle || raffle.participants.size === 0) return null;
   activeRaffles.delete(raffleMessageId);
   const participants = [...raffle.participants];
-  return participants[Math.floor(Math.random() * participants.length)] ?? null;
+  const winnerId = participants[Math.floor(Math.random() * participants.length)]!;
+  return { winnerId, link: raffle.link };
 }
 
 export function deleteRaffle(raffleMessageId: string): void {

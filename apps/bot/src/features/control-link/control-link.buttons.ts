@@ -50,12 +50,14 @@ const endRaffleHandler: ButtonHandler = {
       throw new UserFacingError("Only the raffle host can end it.");
     }
 
-    const winnerId = pickWinner(raffleMessageId);
-    if (!winnerId) {
+    const result = pickWinner(raffleMessageId);
+    if (!result) {
       // Raffle stays active — reply privately so the public embed is untouched.
       await interaction.reply({ content: "No one has entered yet. The raffle is still open.", ephemeral: true });
       return;
     }
+
+    const { winnerId, link } = result;
 
     const embed = new EmbedBuilder()
       .setTitle("Raffle Winner!")
@@ -67,11 +69,11 @@ const endRaffleHandler: ButtonHandler = {
     try {
       const winner = await interaction.client.users.fetch(winnerId);
       await winner.send(
-        `🎉 You won the control-link raffle in **${interaction.guild?.name}**!\n${raffle.link.url}`,
+        `🎉 You won the control-link raffle in **${interaction.guild?.name}**!\n${link.url}`,
       );
     } catch {
       await interaction.followUp({
-        content: `Could not DM <@${winnerId}> — they may have DMs disabled. Share the link with them directly:\n${raffle.link.url}`,
+        content: `Could not DM <@${winnerId}> — they may have DMs disabled. Share the link with them directly:\n${link.url}`,
         ephemeral: true,
       });
     }

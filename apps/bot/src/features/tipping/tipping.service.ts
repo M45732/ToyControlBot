@@ -52,6 +52,14 @@ export async function executeTip(
       throw new UserFacingError("You cannot tip a session you are participating in.");
     }
 
+    // Validate before any writes so the transaction never deducts tokens
+    // for an invalid tip amount.
+    if (amount < receiverIds.length) {
+      throw new UserFacingError(
+        `This session has ${receiverIds.length} controlled user(s); the minimum tip is ${receiverIds.length} token(s).`,
+      );
+    }
+
     // Atomically check balance and deduct. The conditional WHERE on `balance >= amount`
     // means a concurrent tip that races here will get count=0 and we throw, preventing
     // the balance from going negative.
@@ -78,13 +86,6 @@ export async function executeTip(
     await tx.tokenHistory.create({
       data: { guildId, userId: senderId, amount: -amount, eventType: "tip_send", eventId: session.messageId },
     });
-
-    // Require at least 1 token per receiver so no one is vibrated for a 0-token credit.
-    if (amount < receiverIds.length) {
-      throw new UserFacingError(
-        `This session has ${receiverIds.length} controlled user(s); the minimum tip is ${receiverIds.length} token(s).`,
-      );
-    }
 
     // Distribute tokens to receivers — give the remainder to the first participant
     // so the total credited always equals the total debited.
