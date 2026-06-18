@@ -30,7 +30,8 @@ const tipCommand: SlashCommand = {
     const amount = interaction.options.getInteger("amount", true);
     const tipMessage = interaction.options.getString("message") ?? undefined;
 
-    await interaction.deferReply();
+    // Defer ephemerally so any error (e.g. insufficient balance) stays private.
+    await interaction.deferReply({ ephemeral: true });
 
     const result = await executeTip(
       interaction.guildId!,
@@ -40,14 +41,24 @@ const tipCommand: SlashCommand = {
       tipMessage,
     );
 
+    // Private confirmation showing the sender's updated balance.
+    await interaction.editReply({
+      content: `Tip sent! Your new balance: **${result.senderNewBalance}** tokens.`,
+    });
+
+    // Public announcement — only the actual receivers may be mentioned so a
+    // user-supplied tipMessage cannot ping @everyone or arbitrary roles/users.
     const receiversText = result.receiverIds.map((id) => `<@${id}>`).join(", ");
     const lines = [
       `**${interaction.user.displayName}** tipped **${result.amount}** tokens to ${receiversText}! 💝`,
       tipMessage ? `> ${tipMessage}` : null,
-      `Your new balance: **${result.senderNewBalance}** tokens`,
     ].filter(Boolean);
 
-    await interaction.editReply({ content: lines.join("\n") });
+    await interaction.followUp({
+      content: lines.join("\n"),
+      ephemeral: false,
+      allowedMentions: { users: result.receiverIds },
+    });
   },
 };
 

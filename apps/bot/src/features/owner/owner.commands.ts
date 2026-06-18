@@ -9,6 +9,8 @@ import {
 import { config } from "../../config/index.js";
 import type { SlashCommand } from "../../commands/index.js";
 import { UserFacingError } from "../../lib/errors.js";
+import { prisma } from "../../services/database.service.js";
+import { sendVibrate } from "../lovense/lovense.client.js";
 
 function readPackageVersion(): string {
   try {
@@ -46,7 +48,21 @@ const restartCommand: SlashCommand = {
       throw new UserFacingError("Only the bot owner can use this command.");
     }
 
-    await interaction.reply({ content: "Restarting...", ephemeral: true });
+    await interaction.deferReply({ ephemeral: true });
+
+    // Stop all active toys before exiting so participants are not left
+    // vibrating at the last voted level if the process manager is slow.
+    const activeSessions = await prisma.toyControl.findMany({
+      where: { active: true },
+      include: { participants: true },
+    });
+    for (const session of activeSessions) {
+      for (const { userId } of session.participants) {
+        await sendVibrate(userId, 0).catch(() => undefined);
+      }
+    }
+
+    await interaction.editReply({ content: "Restarting..." });
     // Exit 0 so the process manager (PM2, systemd) restarts the bot
     process.exit(0);
   },
