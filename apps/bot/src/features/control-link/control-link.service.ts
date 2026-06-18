@@ -10,7 +10,7 @@ const LINK_PATTERNS: Array<{
   // Lovense Standard API remote-control links (/t2/) and partner-control links (/c/)
   // Match any subdomain of lovense-api.com to cover both api. and c. variants
   { pattern: /https?:\/\/[a-z0-9-]+\.lovense-api\.com\/t2\/[^\s]+/i, provider: "lovense" },
-  { pattern: /https?:\/\/lovense\.com\/c\/[^\s]+/i, provider: "lovense" },
+  { pattern: /https?:\/\/(?:c\.)?lovense\.com\/c\/[^\s]+/i, provider: "lovense" },
   // Handyfeeling session/connect links and legacy /remote?<code> format
   { pattern: /https?:\/\/handyfeeling\.com\/(?:(?:sessions?|connect)\/[^\s]+|remote\?[^\s]+)/i, provider: "handyfeeling" },
   // xtoys room/toy sharing links and legacy /session/<code> format

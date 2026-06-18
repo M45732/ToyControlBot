@@ -121,29 +121,29 @@ export async function startSession(
   }
 
   // Enforce one active session per channel so /tip always has a clear target.
-  // The pendingChannels Set closes the TOCTOU window between the DB check and
-  // the DB insert (which can't be placed in a single transaction because the
-  // Discord message send happens in between).
+  // Claim the lock synchronously (no await between has() and add()) so two
+  // concurrent requests cannot both pass the check before either sets it.
   if (pendingChannels.has(channelId)) {
     throw new UserFacingError(
       "A session is already being started in this channel. Please wait a moment.",
     );
   }
-  const existingChannelSession = await prisma.toyControl.findFirst({
-    where: { channelId, active: true },
-  });
-  if (existingChannelSession) {
-    throw new UserFacingError(
-      "There is already an active session in this channel. End it before starting a new one.",
-    );
-  }
   pendingChannels.add(channelId);
 
   // Wrap everything from here through the DB create in a try/finally so the
-  // channel lock is released even if fetch, send, edit, or create throws.
+  // channel lock is released even if any step throws.
   let sessionMsgId!: string;
   let sessionDbId!: string;
   try {
+    const existingChannelSession = await prisma.toyControl.findFirst({
+      where: { channelId, active: true },
+    });
+    if (existingChannelSession) {
+      throw new UserFacingError(
+        "There is already an active session in this channel. End it before starting a new one.",
+      );
+    }
+
     const channel = await client.channels.fetch(channelId);
     if (!(channel instanceof TextChannel)) {
       throw new Error("Session channel is not a text channel");
@@ -232,6 +232,7 @@ async function runVoteTick(
 
     const channel = await client.channels.fetch(channelId).catch(() => null);
     if (!(channel instanceof TextChannel)) {
+      await endSession(messageId).catch(() => undefined);
       stopVoteLoop(messageId);
       return;
     }
