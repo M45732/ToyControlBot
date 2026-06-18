@@ -17,10 +17,14 @@ import type { SessionMode } from "./session.types.js";
 const log = createLogger("session");
 
 const VOTE_INTERVAL_MS = 5_000;
+const VOTE_RESET_TICKS = 12; // clear reactions every 12 × 5 s = 60 s
 const VOTE_EMOJIS = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"] as const;
 
 /** In-memory registry: messageId → interval handle */
 const activeLoops = new Map<string, ReturnType<typeof setInterval>>();
+
+/** Per-session tick counter for periodic reaction resets */
+const tickCounters = new Map<string, number>();
 
 /**
  * Channels where a session start is in progress. Guards against two concurrent
@@ -205,6 +209,7 @@ export function startVoteLoop(
 ): void {
   if (activeLoops.has(messageId)) return;
 
+  tickCounters.set(messageId, 0);
   const interval = setInterval(
     () => void runVoteTick(client, sessionId, messageId, channelId),
     VOTE_INTERVAL_MS,
@@ -291,6 +296,17 @@ async function runVoteTick(
     );
 
     await message.edit({ embeds: [updatedEmbed] }).catch(() => undefined);
+
+    // Periodically wipe and re-add reactions so stale votes from users who
+    // left don't keep controlling the toy (mirrors legacy 60-second reset).
+    const tick = (tickCounters.get(messageId) ?? 0) + 1;
+    tickCounters.set(messageId, tick);
+    if (tick % VOTE_RESET_TICKS === 0) {
+      await message.reactions.removeAll().catch(() => undefined);
+      for (const emoji of VOTE_EMOJIS) {
+        await message.react(emoji).catch(() => undefined);
+      }
+    }
   } catch (err) {
     log.error({ err, messageId }, "Vote tick error");
   }
@@ -304,10 +320,20 @@ async function runVoteTick(
  * otherwise keep vibrating at the last voted level after the session ends.
  */
 export async function endSession(messageId: string): Promise<void> {
+  // Snapshot participants before deactivating.
   const session = await prisma.toyControl.findUnique({
     where: { messageId },
     include: { participants: true },
   });
+
+  // Deactivate in DB and stop the loop first so concurrent tips, joins, and
+  // vote ticks see the session as ended before the (potentially slow) Lovense
+  // stop commands are sent.
+  await prisma.toyControl.updateMany({
+    where: { messageId, active: true },
+    data: { active: false },
+  });
+  stopVoteLoop(messageId);
 
   if (session) {
     for (const { userId } of session.participants) {
@@ -316,12 +342,6 @@ export async function endSession(messageId: string): Promise<void> {
       );
     }
   }
-
-  stopVoteLoop(messageId);
-  await prisma.toyControl.updateMany({
-    where: { messageId, active: true },
-    data: { active: false },
-  });
 }
 
 function stopVoteLoop(messageId: string): void {
@@ -329,6 +349,7 @@ function stopVoteLoop(messageId: string): void {
   if (handle !== undefined) {
     clearInterval(handle);
     activeLoops.delete(messageId);
+    tickCounters.delete(messageId);
     log.info({ messageId }, "Vote loop stopped");
   }
 }

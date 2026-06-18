@@ -79,6 +79,13 @@ export async function executeTip(
       data: { guildId, userId: senderId, amount: -amount, eventType: "tip_send", eventId: session.messageId },
     });
 
+    // Require at least 1 token per receiver so no one is vibrated for a 0-token credit.
+    if (amount < receiverIds.length) {
+      throw new UserFacingError(
+        `This session has ${receiverIds.length} controlled user(s); the minimum tip is ${receiverIds.length} token(s).`,
+      );
+    }
+
     // Distribute tokens to receivers — give the remainder to the first participant
     // so the total credited always equals the total debited.
     const base = Math.floor(amount / receiverIds.length);
