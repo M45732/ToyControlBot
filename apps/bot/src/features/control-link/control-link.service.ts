@@ -104,7 +104,14 @@ export async function pickWinner(
   });
   if (!raffle || raffle.participants.length === 0) return null;
 
-  await prisma.raffle.update({ where: { id: raffle.id }, data: { active: false } });
+  // Claim atomically: the conditional WHERE active:true means only one of two
+  // concurrent Pick Winner clicks will get count=1; the other gets count=0 and
+  // returns null, preventing a second winner from being announced/DM'd.
+  const claim = await prisma.raffle.updateMany({
+    where: { id: raffle.id, active: true },
+    data: { active: false },
+  });
+  if (claim.count === 0) return null;
 
   const participants = raffle.participants.map((p) => p.userId);
   const winnerId = participants[Math.floor(Math.random() * participants.length)]!;

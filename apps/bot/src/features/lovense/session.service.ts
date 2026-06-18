@@ -113,32 +113,42 @@ export async function startSession(
   ownerId: string,
   mode: SessionMode,
 ): Promise<string> {
-  // Prevent a user from running two sessions simultaneously — concurrent vote
-  // loops for the same Lovense uid would race and produce unpredictable output.
-  const alreadyParticipating = await prisma.toyControlUser.findFirst({
-    where: { userId: ownerId, session: { active: true } },
-  });
-  if (alreadyParticipating) {
+  // Reserve the user before any await — prevents the same owner from starting
+  // sessions in two different channels simultaneously (pendingChannels only
+  // protects within one channel).
+  if (pendingUsers.has(ownerId)) {
     throw new UserFacingError(
-      "You're already in an active session. Leave it first before starting a new one.",
+      "A session start is already in progress for your user. Please wait a moment.",
     );
   }
+  pendingUsers.add(ownerId);
 
   // Enforce one active session per channel so /tip always has a clear target.
   // Claim the lock synchronously (no await between has() and add()) so two
   // concurrent requests cannot both pass the check before either sets it.
   if (pendingChannels.has(channelId)) {
+    pendingUsers.delete(ownerId);
     throw new UserFacingError(
       "A session is already being started in this channel. Please wait a moment.",
     );
   }
   pendingChannels.add(channelId);
 
-  // Wrap everything from here through the DB create in a try/finally so the
-  // channel lock is released even if any step throws.
+  // Wrap everything through the DB create in a try/finally so both locks are
+  // always released even if any step throws.
   let sessionMsgId!: string;
   let sessionDbId!: string;
   try {
+    // Prevent a user from running two sessions simultaneously — concurrent vote
+    // loops for the same Lovense uid would race and produce unpredictable output.
+    const alreadyParticipating = await prisma.toyControlUser.findFirst({
+      where: { userId: ownerId, session: { active: true } },
+    });
+    if (alreadyParticipating) {
+      throw new UserFacingError(
+        "You're already in an active session. Leave it first before starting a new one.",
+      );
+    }
     const existingChannelSession = await prisma.toyControl.findFirst({
       where: { channelId, active: true },
     });
@@ -197,6 +207,7 @@ export async function startSession(
     }
   } finally {
     pendingChannels.delete(channelId);
+    pendingUsers.delete(ownerId);
   }
 
   startVoteLoop(client, sessionDbId, sessionMsgId, channelId);
@@ -430,15 +441,17 @@ export async function leaveSession(
     return "ended";
   }
 
-  // Stop the leaver's toy before removing them — timeSec:0 means it keeps
-  // running at the last voted level once they're no longer in the loop.
-  await sendVibrate(userId, 0).catch((err: unknown) =>
-    log.warn({ err, userId }, "Failed to stop vibration for leaving participant"),
-  );
-
+  // Remove from DB first so any concurrent vote tick that queries participants
+  // after this point will not include the leaver. The stop command is sent
+  // after the row is gone — a tick already in flight with the leaver in its
+  // local list may still fire a vibrate, but this ordering minimises the window.
   await prisma.toyControlUser.deleteMany({
     where: { sessionId: session.id, userId },
   });
+
+  await sendVibrate(userId, 0).catch((err: unknown) =>
+    log.warn({ err, userId }, "Failed to stop vibration for leaving participant"),
+  );
   return "left";
 }
 
