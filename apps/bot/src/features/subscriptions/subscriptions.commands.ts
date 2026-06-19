@@ -169,7 +169,8 @@ const subscriptionCreateCommand: SlashCommand = {
       option
         .setName("name")
         .setDescription("The plan name")
-        .setRequired(true),
+        .setRequired(true)
+        .setMaxLength(100),
     )
     .addIntegerOption((option) =>
       option
@@ -189,7 +190,8 @@ const subscriptionCreateCommand: SlashCommand = {
       option
         .setName("description")
         .setDescription("A short description of the plan")
-        .setRequired(false),
+        .setRequired(false)
+        .setMaxLength(300),
     )
     .addRoleOption((option) =>
       option

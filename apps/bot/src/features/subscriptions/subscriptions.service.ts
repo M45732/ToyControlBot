@@ -147,20 +147,17 @@ export async function cancelAutoRenew(
   userId: string,
   planName: string,
 ): Promise<boolean> {
-  const plan = await getPlanByName(guildId, planName);
-  if (!plan) {
-    return false;
-  }
-
   const now = new Date();
+  // Intentionally does not filter plan.active so subscribers to deactivated
+  // plans can still turn off auto-renewal and avoid unexpected charges.
   const result = await prisma.subscription.updateMany({
     where: {
       guildId,
       userId,
-      planId: plan.id,
       validUntil: { gt: now },
       cancelledAt: null,
       autoRenew: true,
+      plan: { guildId, name: planName },
     },
     data: { autoRenew: false },
   });
@@ -197,7 +194,7 @@ export async function processExpiredSubscriptions(
   });
 
   for (const sub of expired) {
-    if (sub.autoRenew) {
+    if (sub.autoRenew && sub.plan.active) {
       const cost = sub.plan.renewalTokenCost ?? sub.plan.tokenCost;
       const newValidUntil = new Date(
         now.getTime() + sub.plan.durationDays * 24 * 60 * 60 * 1000,
