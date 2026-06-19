@@ -192,23 +192,31 @@ export async function cancelAutoRenew(
       data: { cancelledAt: now },
     });
 
-    if (sub.roleGranted && sub.plan.roleId) {
-      const otherActive = await prisma.subscription.findFirst({
-        where: {
-          guildId,
-          userId,
-          id: { not: sub.id },
-          cancelledAt: null,
-          validUntil: { gt: now },
-          plan: { roleId: sub.plan.roleId },
-        },
+    if (sub.plan.roleId) {
+      // Remove the role only if a subscription was responsible for adding it.
+      // A second same-role sub records roleGranted:false (member already had
+      // the role), so we check ANY sub for this user+role, not just this one.
+      const wasGrantedBySub = await prisma.subscription.findFirst({
+        where: { guildId, userId, roleGranted: true, plan: { roleId: sub.plan.roleId } },
       });
-      if (!otherActive) {
-        try {
-          const member = await guild.members.fetch(userId);
-          await member.roles.remove(sub.plan.roleId);
-        } catch {
-          // Member may have left the guild; ignore role removal failure.
+      if (wasGrantedBySub) {
+        const otherActive = await prisma.subscription.findFirst({
+          where: {
+            guildId,
+            userId,
+            id: { not: sub.id },
+            cancelledAt: null,
+            validUntil: { gt: now },
+            plan: { roleId: sub.plan.roleId },
+          },
+        });
+        if (!otherActive) {
+          try {
+            const member = await guild.members.fetch(userId);
+            await member.roles.remove(sub.plan.roleId);
+          } catch {
+            // Member may have left the guild; ignore role removal failure.
+          }
         }
       }
     }
@@ -315,23 +323,28 @@ export async function processExpiredSubscriptions(
       data: { cancelledAt: now },
     });
 
-    if (cancelled.count > 0 && sub.roleGranted && sub.plan.roleId) {
-      const otherActive = await prisma.subscription.findFirst({
-        where: {
-          guildId,
-          userId,
-          id: { not: sub.id },
-          cancelledAt: null,
-          validUntil: { gt: now },
-          plan: { roleId: sub.plan.roleId },
-        },
+    if (cancelled.count > 0 && sub.plan.roleId) {
+      const wasGrantedBySub = await prisma.subscription.findFirst({
+        where: { guildId, userId, roleGranted: true, plan: { roleId: sub.plan.roleId } },
       });
-      if (!otherActive) {
-        try {
-          const member = await guild.members.fetch(userId);
-          await member.roles.remove(sub.plan.roleId);
-        } catch {
-          // Member may have left the guild; ignore role removal failure.
+      if (wasGrantedBySub) {
+        const otherActive = await prisma.subscription.findFirst({
+          where: {
+            guildId,
+            userId,
+            id: { not: sub.id },
+            cancelledAt: null,
+            validUntil: { gt: now },
+            plan: { roleId: sub.plan.roleId },
+          },
+        });
+        if (!otherActive) {
+          try {
+            const member = await guild.members.fetch(userId);
+            await member.roles.remove(sub.plan.roleId);
+          } catch {
+            // Member may have left the guild; ignore role removal failure.
+          }
         }
       }
     }
