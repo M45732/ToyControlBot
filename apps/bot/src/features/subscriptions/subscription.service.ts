@@ -1,5 +1,6 @@
 import type { Client } from "discord.js";
-import type { Prisma, Subscription, SubscriptionPlan } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { Subscription, SubscriptionPlan } from "@prisma/client";
 
 import { prisma } from "../../services/database.service.js";
 import { UserFacingError } from "../../lib/errors.js";
@@ -33,6 +34,15 @@ const EVENT_INCOME = "subscription_income"; // performer credit (both cases)
  * as the session service).
  */
 const pendingSubscribes = new Set<string>();
+
+/**
+ * Thrown inside the subscribe transaction when the member ends up with valid
+ * access via a concurrent path (a renewal sweep or another subscribe won the
+ * race). Signals the outer handler to roll back our charge but *keep* the
+ * member in the thread, rather than revoking access as it would on a real
+ * failure.
+ */
+class KeepAccessError extends UserFacingError {}
 
 function toUnix(date: Date): number {
   return Math.floor(date.getTime() / 1000);
@@ -187,6 +197,21 @@ export async function subscribe(
           );
         }
 
+        // Re-read the subscription row *inside* the transaction. The upfront
+        // check used a stale read; a renewal sweep may have renewed this row in
+        // the window since (e.g. while we awaited addToThread).
+        const current = await tx.subscription.findUnique({
+          where: {
+            planId_subscriberId: { planId: freshPlan.id, subscriberId },
+          },
+        });
+        if (current && current.status === "active" && current.expiresAt > now) {
+          // Already live — the sweep (or another path) renewed it. Keep access.
+          throw new KeepAccessError(
+            `You're already subscribed — your access runs until <t:${toUnix(current.expiresAt)}:D>.`,
+          );
+        }
+
         const debit = await tx.tokenBalance.updateMany({
           where: {
             guildId,
@@ -203,6 +228,56 @@ export async function subscribe(
             `You need ${freshPlan.priceTokens} tokens to subscribe. Your balance is ${row?.balance ?? 0}.`,
           );
         }
+
+        // Claim the subscription as ours for this period. A renewal sweep racing
+        // us changes the row's (status, expiresAt), so its conditional claim and
+        // ours are mutually exclusive — only one charges. If we lose, throwing
+        // rolls back the debit above and keeps the member's access (the winner
+        // activated them).
+        if (current) {
+          const claim = await tx.subscription.updateMany({
+            where: {
+              id: current.id,
+              status: current.status,
+              expiresAt: current.expiresAt,
+            },
+            data: {
+              status: "active",
+              autoRenew: true,
+              expiresAt,
+              lastChargedAt: now,
+            },
+          });
+          if (claim.count === 0) {
+            throw new KeepAccessError(
+              "Your subscription was just updated elsewhere — you're all set.",
+            );
+          }
+        } else {
+          try {
+            await tx.subscription.create({
+              data: {
+                planId: freshPlan.id,
+                subscriberId,
+                status: "active",
+                autoRenew: true,
+                expiresAt,
+                lastChargedAt: now,
+              },
+            });
+          } catch (err) {
+            if (
+              err instanceof Prisma.PrismaClientKnownRequestError &&
+              err.code === "P2002"
+            ) {
+              throw new KeepAccessError(
+                "Your subscription was just created elsewhere — you're all set.",
+              );
+            }
+            throw err;
+          }
+        }
+
         await tx.tokenHistory.create({
           data: {
             guildId,
@@ -212,7 +287,6 @@ export async function subscribe(
             eventId: freshPlan.id,
           },
         });
-
         await creditPerformer(
           tx,
           guildId,
@@ -220,26 +294,6 @@ export async function subscribe(
           freshPlan.priceTokens,
           freshPlan.id,
         );
-
-        await tx.subscription.upsert({
-          where: {
-            planId_subscriberId: { planId: freshPlan.id, subscriberId },
-          },
-          update: {
-            status: "active",
-            autoRenew: true,
-            expiresAt,
-            lastChargedAt: now,
-          },
-          create: {
-            planId: freshPlan.id,
-            subscriberId,
-            status: "active",
-            autoRenew: true,
-            expiresAt,
-            lastChargedAt: now,
-          },
-        });
 
         const balanceRow = await tx.tokenBalance.findUnique({
           where: { guildId_userId: { guildId, userId: subscriberId } },
@@ -251,14 +305,17 @@ export async function subscribe(
           priceTokens: freshPlan.priceTokens,
           expiresAt,
           subscriberNewBalance: balanceRow?.balance ?? 0,
-          renewed: existing !== null,
+          renewed: current !== null,
         } satisfies SubscribeResult;
       });
     } catch (err) {
-      // The charge failed (e.g. insufficient balance) after we granted thread
-      // access. Revoke it so a non-paying user isn't left in the thread — safe
-      // because we pre-checked they had no active subscription and hold the
-      // per-user lock, so they had no prior claim to this thread.
+      // A concurrent renewal/subscribe already gave them valid access — roll
+      // back our charge (already done by the throw) but leave them in the thread.
+      if (err instanceof KeepAccessError) {
+        throw err;
+      }
+      // Any other failure (insufficient balance, plan moved, unexpected) means
+      // they have no live access, so revoke the thread membership we granted.
       await removeFromThread(client, plan.threadId, subscriberId);
       throw err;
     }
