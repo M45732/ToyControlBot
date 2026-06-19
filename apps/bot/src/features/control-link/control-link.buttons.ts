@@ -2,7 +2,7 @@ import { type ButtonInteraction, EmbedBuilder } from "discord.js";
 
 import type { ButtonHandler } from "../../buttons/types.js";
 import { UserFacingError } from "../../lib/errors.js";
-import { getRaffle, joinRaffle, pickWinner } from "./control-link.service.js";
+import { joinRaffle, pickWinner } from "./control-link.service.js";
 
 const joinRaffleHandler: ButtonHandler = {
   matches(customId: string): boolean {
@@ -40,17 +40,15 @@ const endRaffleHandler: ButtonHandler = {
     }
 
     const raffleMessageId = interaction.customId.slice("raffle:end:".length);
-    const raffle = await getRaffle(raffleMessageId);
+    const result = await pickWinner(raffleMessageId, interaction.user.id);
 
-    if (!raffle) {
+    if (result === null) {
       throw new UserFacingError("This raffle has already ended.");
     }
-    if (raffle.hostId !== interaction.user.id) {
+    if (result === "not-host") {
       throw new UserFacingError("Only the raffle host can end it.");
     }
-
-    const result = await pickWinner(raffleMessageId);
-    if (!result) {
+    if (result === "empty") {
       // Raffle stays active — reply privately so the public embed is untouched.
       await interaction.reply({ content: "No one has entered yet. The raffle is still open.", ephemeral: true });
       return;

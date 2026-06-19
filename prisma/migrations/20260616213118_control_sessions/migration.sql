@@ -36,13 +36,13 @@ CREATE TABLE "TipHistory" (
     CONSTRAINT "TipHistory_pkey" PRIMARY KEY ("id")
 );
 
--- CreateUniqueIndex
+-- CreateIndex
 CREATE UNIQUE INDEX "ToyControl_messageId_key" ON "ToyControl"("messageId");
 
 -- CreateIndex
 CREATE INDEX "ToyControl_guildId_active_idx" ON "ToyControl"("guildId", "active");
 
--- CreateUniqueIndex
+-- CreateIndex
 CREATE UNIQUE INDEX "ToyControlUser_sessionId_userId_key" ON "ToyControlUser"("sessionId", "userId");
 
 -- CreateIndex

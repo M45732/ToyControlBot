@@ -22,13 +22,13 @@ CREATE TABLE "RaffleParticipant" (
     CONSTRAINT "RaffleParticipant_pkey" PRIMARY KEY ("id")
 );
 
--- CreateUniqueIndex
+-- CreateIndex
 CREATE UNIQUE INDEX "Raffle_messageId_key" ON "Raffle"("messageId");
 
 -- CreateIndex
 CREATE INDEX "Raffle_guildId_active_idx" ON "Raffle"("guildId", "active");
 
--- CreateUniqueIndex
+-- CreateIndex
 CREATE UNIQUE INDEX "RaffleParticipant_raffleId_userId_key" ON "RaffleParticipant"("raffleId", "userId");
 
 -- AddForeignKey

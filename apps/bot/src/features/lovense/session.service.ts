@@ -164,14 +164,10 @@ export async function startSession(
     }
 
     const embed = buildSessionEmbed(mode, ownerId, [ownerId], 0, null);
-    const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId("session:leave")
-        .setLabel("⏹ End/Leave")
-        .setStyle(ButtonStyle.Danger),
-    );
-
-    const sessionMsg = await channel.send({ embeds: [embed], components: [placeholderRow] });
+    // Use buildSessionRow for all modes so adding a button there applies
+    // everywhere. For orgy the join button needs the real message ID, so we
+    // pass an empty string here and re-edit immediately after send.
+    const sessionMsg = await channel.send({ embeds: [embed], components: [buildSessionRow(mode, "")] });
 
     // Update buttons now that we have the real message ID (join button needs it).
     // If the edit fails the message is already visible but un-joinable; delete it
@@ -252,7 +248,7 @@ async function runVoteTick(
   try {
     const session = await prisma.toyControl.findUnique({
       where: { id: sessionId },
-      include: { participants: true },
+      select: { active: true, sessionMode: true, ownerId: true },
     });
 
     if (!session?.active) {

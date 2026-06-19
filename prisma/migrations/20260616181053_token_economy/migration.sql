@@ -36,11 +36,11 @@ CREATE TABLE "DailyToken" (
 -- CreateIndex
 CREATE INDEX "TokenBalance_guildId_balance_idx" ON "TokenBalance"("guildId", "balance");
 
--- CreateUniqueIndex
+-- CreateIndex
 CREATE UNIQUE INDEX "TokenBalance_guildId_userId_key" ON "TokenBalance"("guildId", "userId");
 
 -- CreateIndex
 CREATE INDEX "TokenHistory_guildId_userId_createdAt_idx" ON "TokenHistory"("guildId", "userId", "createdAt");
 
--- CreateUniqueIndex
+-- CreateIndex
 CREATE UNIQUE INDEX "DailyToken_guildId_userId_key" ON "DailyToken"("guildId", "userId");

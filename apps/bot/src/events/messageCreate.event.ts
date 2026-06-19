@@ -3,17 +3,13 @@ import {
   Events,
   type Message,
   ThreadChannel,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } from "discord.js";
 
 import { config } from "../config/index.js";
 import { createLogger } from "../lib/logger.js";
 import {
-  createRaffle,
   detectControlLink,
+  postRaffleEmbed,
 } from "../features/control-link/control-link.service.js";
 import { defineEvent } from "./types.js";
 
@@ -56,25 +52,6 @@ export const messageCreateEvent = defineEvent({
       return;
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle("Control Link Raffle")
-      .setDescription(
-        `<@${message.author.id}> shared a **${link.provider}** control link!\n\nClick **Enter Raffle** to join. The host clicks **Pick Winner** when ready.`,
-      )
-      .setColor(0x7289da)
-      .setFooter({ text: `Provider: ${link.provider}` });
-
-    const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId("raffle:join:_")
-        .setLabel("Enter Raffle")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("raffle:end:_")
-        .setLabel("Pick Winner")
-        .setStyle(ButtonStyle.Success),
-    );
-
     if (!(message.channel instanceof BaseGuildTextChannel) && !(message.channel instanceof ThreadChannel)) return;
 
     // Delete the original message before posting the raffle so the URL is never
@@ -95,26 +72,10 @@ export const messageCreateEvent = defineEvent({
       return;
     }
 
-    let raffleMsg: Message;
     try {
-      raffleMsg = await message.channel.send({ embeds: [embed], components: [placeholderRow] });
+      await postRaffleEmbed(message.channel, message.author.id, message.guildId, message.channelId, link);
     } catch (err) {
       log.error({ err }, "Failed to send raffle message");
-      return;
     }
-
-    await createRaffle(raffleMsg.id, message.channelId, message.guildId, link, message.author.id);
-
-    const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`raffle:join:${raffleMsg.id}`)
-        .setLabel("Enter Raffle")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`raffle:end:${raffleMsg.id}`)
-        .setLabel("Pick Winner")
-        .setStyle(ButtonStyle.Success),
-    );
-    await raffleMsg.edit({ components: [updatedRow] }).catch(() => undefined);
   },
 });
