@@ -1,30 +1,36 @@
 -- CreateTable
 CREATE TABLE "TokenBalance" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "guildId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "balance" INTEGER NOT NULL DEFAULT 0,
-    "updatedAt" DATETIME NOT NULL
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "TokenBalance_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "TokenHistory" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "guildId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "amount" INTEGER NOT NULL,
     "eventType" TEXT NOT NULL,
     "eventId" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "TokenHistory_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "DailyToken" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "guildId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "lastRedeem" DATETIME NOT NULL,
-    "streakDays" INTEGER NOT NULL DEFAULT 1
+    "lastRedeem" TIMESTAMP(3) NOT NULL,
+    "streakDays" INTEGER NOT NULL DEFAULT 1,
+
+    CONSTRAINT "DailyToken_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex

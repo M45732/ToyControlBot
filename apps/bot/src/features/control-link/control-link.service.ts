@@ -1,3 +1,13 @@
+import {
+  ActionRowBuilder,
+  BaseGuildTextChannel,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+  type Message,
+  ThreadChannel,
+} from "discord.js";
+
 import { prisma } from "../../services/database.service.js";
 import type { ParsedControlLink } from "./control-link.types.js";
 
@@ -99,23 +109,28 @@ export async function joinRaffle(
 
 /**
  * Pick a random winner and return them with the control link.
- * Returns null if nobody has entered — raffle stays active.
  *
- * The entire operation runs inside a transaction. The conditional updateMany
- * (WHERE active=true) means only one of two concurrent Pick Winner clicks
- * gets count=1 and proceeds; the other returns null without announcing a
- * second winner. The raffle row is deleted on completion so the private URL
- * is not retained in database backups.
+ * The hostId check, the claim, and the winner selection all happen inside one
+ * transaction so two concurrent "Pick Winner" clicks cannot both announce a
+ * winner, and a non-host cannot slip through between a separate host check and
+ * the claim.
+ *
+ * Returns null if nobody has entered (raffle stays active), "not-host" if the
+ * caller is not the raffle host, or the winner + link on success. The raffle
+ * row is deleted on completion so the private URL is not retained.
  */
 export async function pickWinner(
   raffleMessageId: string,
-): Promise<{ winnerId: string; link: ParsedControlLink } | null> {
+  hostId: string,
+): Promise<{ winnerId: string; link: ParsedControlLink } | "not-host" | "empty" | null> {
   return prisma.$transaction(async (tx) => {
     const raffle = await tx.raffle.findUnique({
       where: { messageId: raffleMessageId, active: true },
       include: { participants: true },
     });
-    if (!raffle || raffle.participants.length === 0) return null;
+    if (!raffle) return null;
+    if (raffle.hostId !== hostId) return "not-host";
+    if (raffle.participants.length === 0) return "empty";
 
     const claim = await tx.raffle.updateMany({
       where: { id: raffle.id, active: true },
@@ -137,4 +152,56 @@ export async function pickWinner(
 
 export async function deleteRaffle(raffleMessageId: string): Promise<void> {
   await prisma.raffle.deleteMany({ where: { messageId: raffleMessageId } });
+}
+
+/**
+ * Build and post the raffle embed for a newly detected control link, then
+ * persist the raffle to the database and update the button customIds with
+ * the real message ID.
+ *
+ * Shared by messageCreate and messageUpdate so the raffle posting logic
+ * lives in one place.
+ */
+export async function postRaffleEmbed(
+  channel: BaseGuildTextChannel | ThreadChannel,
+  authorId: string,
+  guildId: string,
+  channelId: string,
+  link: ParsedControlLink,
+): Promise<void> {
+  const embed = new EmbedBuilder()
+    .setTitle("Control Link Raffle")
+    .setDescription(
+      `<@${authorId}> shared a **${link.provider}** control link!\n\nClick **Enter Raffle** to join. The host clicks **Pick Winner** when ready.`,
+    )
+    .setColor(0x7289da)
+    .setFooter({ text: `Provider: ${link.provider}` });
+
+  const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("raffle:join:_")
+      .setLabel("Enter Raffle")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("raffle:end:_")
+      .setLabel("Pick Winner")
+      .setStyle(ButtonStyle.Success),
+  );
+
+  let raffleMsg: Message;
+  raffleMsg = await channel.send({ embeds: [embed], components: [placeholderRow] });
+
+  await createRaffle(raffleMsg.id, channelId, guildId, link, authorId);
+
+  const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`raffle:join:${raffleMsg.id}`)
+      .setLabel("Enter Raffle")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`raffle:end:${raffleMsg.id}`)
+      .setLabel("Pick Winner")
+      .setStyle(ButtonStyle.Success),
+  );
+  await raffleMsg.edit({ components: [updatedRow] }).catch(() => undefined);
 }
