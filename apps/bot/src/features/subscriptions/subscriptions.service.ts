@@ -1,10 +1,6 @@
 import type { Guild } from "discord.js";
 
 import { prisma } from "../../services/database.service.js";
-import {
-  adjustBalance,
-  getBalance,
-} from "../economy/economy.service.js";
 import type {
   BuyResult,
   RenewResult,
@@ -93,46 +89,57 @@ export async function buySubscription(
   }
 
   const now = new Date();
-  const existing = await prisma.subscription.findFirst({
-    where: {
-      guildId,
-      userId,
-      planId: plan.id,
-      validUntil: { gt: now },
-      cancelledAt: null,
-    },
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.subscription.findFirst({
+      where: {
+        guildId,
+        userId,
+        planId: plan.id,
+        validUntil: { gt: now },
+        cancelledAt: null,
+      },
+    });
+    if (existing) {
+      return { success: false, reason: "already_active" } as BuyResult;
+    }
+
+    const balanceRow = await tx.tokenBalance.findUnique({
+      where: { guildId_userId: { guildId, userId } },
+    });
+    if ((balanceRow?.balance ?? 0) < plan.tokenCost) {
+      return { success: false, reason: "insufficient_tokens" } as BuyResult;
+    }
+
+    const validUntil = new Date(
+      now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000,
+    );
+    const sub = await tx.subscription.create({
+      data: { guildId, userId, planId: plan.id, autoRenew, validUntil },
+      include: { plan: true },
+    });
+
+    await tx.tokenBalance.upsert({
+      where: { guildId_userId: { guildId, userId } },
+      update: { balance: { decrement: plan.tokenCost } },
+      create: { guildId, userId, balance: -plan.tokenCost },
+    });
+    await tx.tokenHistory.create({
+      data: {
+        guildId,
+        userId,
+        amount: -plan.tokenCost,
+        eventType: "subscription_buy",
+        eventId: sub.id,
+      },
+    });
+
+    return {
+      success: true,
+      subscription: toSubscriptionData(sub),
+      tokensSpent: plan.tokenCost,
+    } as BuyResult;
   });
-  if (existing) {
-    return { success: false, reason: "already_active" };
-  }
-
-  const balance = await getBalance(guildId, userId);
-  if (balance < plan.tokenCost) {
-    return { success: false, reason: "insufficient_tokens" };
-  }
-
-  const validUntil = new Date(
-    now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000,
-  );
-
-  const sub = await prisma.subscription.create({
-    data: {
-      guildId,
-      userId,
-      planId: plan.id,
-      autoRenew,
-      validUntil,
-    },
-    include: { plan: true },
-  });
-
-  await adjustBalance(guildId, userId, -plan.tokenCost, "subscription_buy", sub.id);
-
-  return {
-    success: true,
-    subscription: toSubscriptionData(sub),
-    tokensSpent: plan.tokenCost,
-  };
 }
 
 export async function cancelAutoRenew(
@@ -192,32 +199,51 @@ export async function processExpiredSubscriptions(
   for (const sub of expired) {
     if (sub.autoRenew) {
       const cost = sub.plan.renewalTokenCost ?? sub.plan.tokenCost;
-      const balance = await getBalance(guildId, userId);
-      if (balance >= cost) {
-        const newValidUntil = new Date(
-          now.getTime() + sub.plan.durationDays * 24 * 60 * 60 * 1000,
-        );
-        await prisma.subscription.update({
-          where: { id: sub.id },
+      const newValidUntil = new Date(
+        now.getTime() + sub.plan.durationDays * 24 * 60 * 60 * 1000,
+      );
+
+      const renewed = await prisma.$transaction(async (tx) => {
+        const balanceRow = await tx.tokenBalance.findUnique({
+          where: { guildId_userId: { guildId, userId } },
+        });
+        if ((balanceRow?.balance ?? 0) < cost) {
+          return false;
+        }
+        // Atomic test-and-set: only extend if still expired and not cancelled.
+        const claimed = await tx.subscription.updateMany({
+          where: { id: sub.id, validUntil: { lte: now }, cancelledAt: null },
           data: { validUntil: newValidUntil },
         });
-        await adjustBalance(
-          guildId,
-          userId,
-          -cost,
-          "subscription_renew",
-          sub.id,
-        );
-        continue;
-      }
+        if (claimed.count === 0) {
+          return false;
+        }
+        await tx.tokenBalance.update({
+          where: { guildId_userId: { guildId, userId } },
+          data: { balance: { decrement: cost } },
+        });
+        await tx.tokenHistory.create({
+          data: {
+            guildId,
+            userId,
+            amount: -cost,
+            eventType: "subscription_renew",
+            eventId: sub.id,
+          },
+        });
+        return true;
+      });
+
+      if (renewed) continue;
     }
 
-    await prisma.subscription.update({
-      where: { id: sub.id },
+    // Only the first concurrent request to reach here wins; the rest are no-ops.
+    const cancelled = await prisma.subscription.updateMany({
+      where: { id: sub.id, cancelledAt: null },
       data: { cancelledAt: now },
     });
 
-    if (sub.plan.roleId) {
+    if (cancelled.count > 0 && sub.plan.roleId) {
       try {
         const member = await guild.members.fetch(userId);
         await member.roles.remove(sub.plan.roleId);

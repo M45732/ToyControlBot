@@ -15,7 +15,11 @@ export function buildPlansEmbed(plans: SubscriptionPlanData[]): EmbedBuilder {
     return embed;
   }
 
-  for (const plan of plans) {
+  const MAX_FIELDS = 25;
+  const displayed = plans.slice(0, MAX_FIELDS);
+  const overflow = plans.length - displayed.length;
+
+  for (const plan of displayed) {
     const lines: string[] = [
       `**Cost:** ${plan.tokenCost} token`,
       `**Duration:** ${plan.durationDays} day${plan.durationDays !== 1 ? "s" : ""}`,
@@ -30,6 +34,10 @@ export function buildPlansEmbed(plans: SubscriptionPlanData[]): EmbedBuilder {
       lines.push(plan.description);
     }
     embed.addFields({ name: plan.name, value: lines.join("\n"), inline: false });
+  }
+
+  if (overflow > 0) {
+    embed.setFooter({ text: `${overflow} more plan${overflow !== 1 ? "s" : ""} not shown` });
   }
 
   return embed;

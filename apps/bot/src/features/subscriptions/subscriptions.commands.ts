@@ -215,6 +215,15 @@ const subscriptionCreateCommand: SlashCommand = {
     const role = interaction.options.getRole("role");
     const renewalCost = interaction.options.getInteger("renewal_cost") ?? undefined;
 
+    if (role) {
+      const botMember = await interaction.guild!.members.fetchMe();
+      if (role.position >= botMember.roles.highest.position) {
+        throw new UserFacingError(
+          `I cannot manage the role **${role.name}** because it is at or above my highest role. Please choose a role below my top role.`,
+        );
+      }
+    }
+
     await interaction.deferReply({ ephemeral: true });
 
     const plan = await createPlan(guildId, {
