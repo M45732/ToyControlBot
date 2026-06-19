@@ -19,6 +19,7 @@ import {
   getActivePlans,
   getUserSubscriptions,
   grantSubscriptionRole,
+  markRoleGranted,
   processExpiredSubscriptions,
 } from "./subscriptions.service.js";
 
@@ -120,7 +121,10 @@ const subscriptionBuyCommand: SlashCommand = {
       const plans = await getActivePlans(guildId);
       const plan = plans.find((p) => p.id === result.subscription!.planId);
       if (plan?.roleId) {
-        await grantSubscriptionRole(member.guild, userId, plan.roleId);
+        const granted = await grantSubscriptionRole(member.guild, userId, plan.roleId);
+        if (granted) {
+          await markRoleGranted(result.subscription.id);
+        }
       }
     }
 

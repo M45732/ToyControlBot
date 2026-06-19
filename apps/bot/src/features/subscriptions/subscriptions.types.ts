@@ -15,6 +15,7 @@ export interface SubscriptionData {
   readonly planId: string;
   readonly planName: string;
   readonly autoRenew: boolean;
+  readonly roleGranted: boolean;
   readonly validUntil: Date;
   readonly cancelledAt: Date | null;
   readonly createdAt: Date;

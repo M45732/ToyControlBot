@@ -60,6 +60,7 @@ function toSubscriptionData(
     userId: string;
     planId: string;
     autoRenew: boolean;
+    roleGranted: boolean;
     validUntil: Date;
     cancelledAt: Date | null;
     createdAt: Date;
@@ -72,6 +73,7 @@ function toSubscriptionData(
     planId: sub.planId,
     planName: sub.plan.name,
     autoRenew: sub.autoRenew,
+    roleGranted: sub.roleGranted,
     validUntil: sub.validUntil,
     cancelledAt: sub.cancelledAt,
     createdAt: sub.createdAt,
@@ -185,7 +187,7 @@ export async function cancelAutoRenew(
       data: { cancelledAt: now },
     });
 
-    if (sub.plan.roleId) {
+    if (sub.roleGranted && sub.plan.roleId) {
       const otherActive = await prisma.subscription.findFirst({
         where: {
           guildId,
@@ -193,6 +195,7 @@ export async function cancelAutoRenew(
           id: { not: sub.id },
           cancelledAt: null,
           validUntil: { gt: now },
+          roleGranted: true,
           plan: { roleId: sub.plan.roleId },
         },
       });
@@ -290,7 +293,10 @@ export async function processExpiredSubscriptions(
       // Re-grant the role in case it was revoked by an earlier cancellation
       // in a prior batch that processed before this renewal succeeded.
       if (sub.plan.roleId) {
-        await grantSubscriptionRole(guild, userId, sub.plan.roleId);
+        const granted = await grantSubscriptionRole(guild, userId, sub.plan.roleId);
+        if (granted) {
+          await markRoleGranted(sub.id);
+        }
       }
     }
   }
@@ -305,7 +311,7 @@ export async function processExpiredSubscriptions(
       data: { cancelledAt: now },
     });
 
-    if (cancelled.count > 0 && sub.plan.roleId) {
+    if (cancelled.count > 0 && sub.roleGranted && sub.plan.roleId) {
       const otherActive = await prisma.subscription.findFirst({
         where: {
           guildId,
@@ -313,6 +319,7 @@ export async function processExpiredSubscriptions(
           id: { not: sub.id },
           cancelledAt: null,
           validUntil: { gt: now },
+          roleGranted: true,
           plan: { roleId: sub.plan.roleId },
         },
       });
@@ -328,15 +335,30 @@ export async function processExpiredSubscriptions(
   }
 }
 
+/**
+ * Grant a role to a member. Returns true only when the role was actually added
+ * (i.e. the member did not already hold it), so callers can record whether this
+ * subscription is responsible for the grant and should later remove the role.
+ */
 export async function grantSubscriptionRole(
   guild: Guild,
   userId: string,
   roleId: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const member = await guild.members.fetch(userId);
+    if (member.roles.cache.has(roleId)) return false;
     await member.roles.add(roleId);
+    return true;
   } catch {
     // Member may have left the guild; ignore role grant failure.
+    return false;
   }
+}
+
+export async function markRoleGranted(subscriptionId: string): Promise<void> {
+  await prisma.subscription.update({
+    where: { id: subscriptionId },
+    data: { roleGranted: true },
+  });
 }

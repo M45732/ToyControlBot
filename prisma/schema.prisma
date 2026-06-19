@@ -135,6 +135,7 @@ model Subscription {
   userId      String
   planId      String
   autoRenew   Boolean          @default(false)
+  roleGranted Boolean          @default(false)
   validUntil  DateTime
   cancelledAt DateTime?
   createdAt   DateTime         @default(now())
