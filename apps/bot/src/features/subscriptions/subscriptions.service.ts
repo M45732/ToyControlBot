@@ -1,5 +1,6 @@
 import type { Client, Guild } from "discord.js";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../services/database.service.js";
 import type {
   BuyResult,
@@ -93,54 +94,60 @@ export async function buySubscription(
 
   const now = new Date();
 
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.subscription.findFirst({
-      where: {
-        guildId,
-        userId,
-        planId: plan.id,
-        validUntil: { gt: now },
-        cancelledAt: null,
-      },
-    });
-    if (existing) {
-      return { success: false, reason: "already_active" } as BuyResult;
-    }
+  return prisma.$transaction(
+    async (tx) => {
+      // Serializable isolation makes findFirst + create an atomic "check then
+      // insert" — concurrent transactions for the same plan will serialize,
+      // preventing two active subscriptions from being created simultaneously.
+      const existing = await tx.subscription.findFirst({
+        where: {
+          guildId,
+          userId,
+          planId: plan.id,
+          validUntil: { gt: now },
+          cancelledAt: null,
+        },
+      });
+      if (existing) {
+        return { success: false, reason: "already_active" } as BuyResult;
+      }
 
-    // Conditional atomic debit: same pattern as renewals. updateMany returns
-    // count=0 when balance is insufficient or no balance row exists yet.
-    const deducted = await tx.tokenBalance.updateMany({
-      where: { guildId, userId, balance: { gte: plan.tokenCost } },
-      data: { balance: { decrement: plan.tokenCost } },
-    });
-    if (deducted.count === 0) {
-      return { success: false, reason: "insufficient_tokens" } as BuyResult;
-    }
+      // Conditional atomic debit: same pattern as renewals. updateMany returns
+      // count=0 when balance is insufficient or no balance row exists yet.
+      const deducted = await tx.tokenBalance.updateMany({
+        where: { guildId, userId, balance: { gte: plan.tokenCost } },
+        data: { balance: { decrement: plan.tokenCost } },
+      });
+      if (deducted.count === 0) {
+        return { success: false, reason: "insufficient_tokens" } as BuyResult;
+      }
 
-    const validUntil = new Date(
-      now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000,
-    );
-    const sub = await tx.subscription.create({
-      data: { guildId, userId, planId: plan.id, autoRenew, validUntil },
-      include: { plan: true },
-    });
+      const validUntil = new Date(
+        now.getTime() + plan.durationDays * 24 * 60 * 60 * 1000,
+      );
+      const sub = await tx.subscription.create({
+        data: { guildId, userId, planId: plan.id, autoRenew, validUntil },
+        include: { plan: true },
+      });
 
-    await tx.tokenHistory.create({
-      data: {
-        guildId,
-        userId,
-        amount: -plan.tokenCost,
-        eventType: "subscription_buy",
-        eventId: sub.id,
-      },
-    });
+      await tx.tokenHistory.create({
+        data: {
+          guildId,
+          userId,
+          amount: -plan.tokenCost,
+          eventType: "subscription_buy",
+          eventId: sub.id,
+        },
+      });
 
-    return {
-      success: true,
-      subscription: toSubscriptionData(sub),
-      tokensSpent: plan.tokenCost,
-    } as BuyResult;
-  });
+      return {
+        success: true,
+        subscription: toSubscriptionData(sub),
+        tokensSpent: plan.tokenCost,
+      } as BuyResult;
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 }
 
 export async function cancelAutoRenew(
@@ -193,7 +200,6 @@ export async function cancelAutoRenew(
           id: { not: sub.id },
           cancelledAt: null,
           validUntil: { gt: now },
-          roleGranted: true,
           plan: { roleId: sub.plan.roleId },
         },
       });
@@ -317,7 +323,6 @@ export async function processExpiredSubscriptions(
           id: { not: sub.id },
           cancelledAt: null,
           validUntil: { gt: now },
-          roleGranted: true,
           plan: { roleId: sub.plan.roleId },
         },
       });

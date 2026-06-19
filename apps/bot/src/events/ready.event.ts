@@ -30,5 +30,13 @@ export const readyEvent = defineEvent({
     await sweepExpiredSubscriptions(client).catch((err: unknown) =>
       log.error({ err }, "Failed to sweep expired subscriptions"),
     );
+
+    setInterval(
+      () =>
+        sweepExpiredSubscriptions(client).catch((err: unknown) =>
+          log.error({ err }, "Failed periodic subscription sweep"),
+        ),
+      60 * 60 * 1000,
+    );
   },
 });
