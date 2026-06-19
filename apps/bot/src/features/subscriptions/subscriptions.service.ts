@@ -1,4 +1,4 @@
-import type { Guild } from "discord.js";
+import type { Client, Guild } from "discord.js";
 
 import { prisma } from "../../services/database.service.js";
 import type {
@@ -107,10 +107,13 @@ export async function buySubscription(
       return { success: false, reason: "already_active" } as BuyResult;
     }
 
-    const balanceRow = await tx.tokenBalance.findUnique({
-      where: { guildId_userId: { guildId, userId } },
+    // Conditional atomic debit: same pattern as renewals. updateMany returns
+    // count=0 when balance is insufficient or no balance row exists yet.
+    const deducted = await tx.tokenBalance.updateMany({
+      where: { guildId, userId, balance: { gte: plan.tokenCost } },
+      data: { balance: { decrement: plan.tokenCost } },
     });
-    if ((balanceRow?.balance ?? 0) < plan.tokenCost) {
+    if (deducted.count === 0) {
       return { success: false, reason: "insufficient_tokens" } as BuyResult;
     }
 
@@ -122,11 +125,6 @@ export async function buySubscription(
       include: { plan: true },
     });
 
-    await tx.tokenBalance.upsert({
-      where: { guildId_userId: { guildId, userId } },
-      update: { balance: { decrement: plan.tokenCost } },
-      create: { guildId, userId, balance: -plan.tokenCost },
-    });
     await tx.tokenHistory.create({
       data: {
         guildId,
@@ -361,4 +359,24 @@ export async function markRoleGranted(subscriptionId: string): Promise<void> {
     where: { id: subscriptionId },
     data: { roleGranted: true },
   });
+}
+
+/**
+ * Startup sweep: process all expired subscriptions across every guild the bot
+ * is in. Called once from the ready event so members who stop using commands
+ * still have roles revoked when their subscriptions lapse.
+ */
+export async function sweepExpiredSubscriptions(client: Client): Promise<void> {
+  const now = new Date();
+  const rows = await prisma.subscription.findMany({
+    where: { validUntil: { lte: now }, cancelledAt: null },
+    select: { guildId: true, userId: true },
+    distinct: ["guildId", "userId"],
+  });
+
+  for (const { guildId, userId } of rows) {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) continue;
+    await processExpiredSubscriptions(guildId, userId, guild).catch(() => {});
+  }
 }

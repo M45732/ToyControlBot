@@ -2,6 +2,7 @@ import { Events } from "discord.js";
 
 import { createLogger } from "../lib/logger.js";
 import { restoreActiveSessions } from "../features/lovense/session.service.js";
+import { sweepExpiredSubscriptions } from "../features/subscriptions/subscriptions.service.js";
 import { defineEvent } from "./types.js";
 
 const log = createLogger("ready");
@@ -24,6 +25,10 @@ export const readyEvent = defineEvent({
 
     await restoreActiveSessions(client).catch((err: unknown) =>
       log.error({ err }, "Failed to restore active sessions"),
+    );
+
+    await sweepExpiredSubscriptions(client).catch((err: unknown) =>
+      log.error({ err }, "Failed to sweep expired subscriptions"),
     );
   },
 });

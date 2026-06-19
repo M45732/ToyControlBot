@@ -234,6 +234,11 @@ const subscriptionCreateCommand: SlashCommand = {
         );
       }
       const botMember = await interaction.guild!.members.fetchMe();
+      if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        throw new UserFacingError(
+          "I am missing the **Manage Roles** permission and cannot assign roles to subscribers.",
+        );
+      }
       if (role.position >= botMember.roles.highest.position) {
         throw new UserFacingError(
           `I cannot manage the role **${role.name}** because it is at or above my highest role. Please choose a role below my top role.`,
