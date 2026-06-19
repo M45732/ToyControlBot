@@ -48,9 +48,10 @@ export async function getPlanByName(
   guildId: string,
   name: string,
 ): Promise<SubscriptionPlanData | null> {
-  return prisma.subscriptionPlan.findFirst({
-    where: { guildId_name: { guildId, name }, active: true },
+  const plan = await prisma.subscriptionPlan.findUnique({
+    where: { guildId_name: { guildId, name } },
   });
+  return plan?.active ? plan : null;
 }
 
 function toSubscriptionData(
@@ -147,14 +148,13 @@ export async function cancelAutoRenew(
   userId: string,
   planName: string,
 ): Promise<boolean> {
-  const now = new Date();
-  // Intentionally does not filter plan.active so subscribers to deactivated
-  // plans can still turn off auto-renewal and avoid unexpected charges.
+  // No validUntil filter: also clears auto-renewal on expired-but-unprocessed rows
+  // so a user who cancels before lazy processing isn't charged on the next call.
+  // Does not filter plan.active so subscribers to deactivated plans can still cancel.
   const result = await prisma.subscription.updateMany({
     where: {
       guildId,
       userId,
-      validUntil: { gt: now },
       cancelledAt: null,
       autoRenew: true,
       plan: { guildId, name: planName },
@@ -193,50 +193,65 @@ export async function processExpiredSubscriptions(
     include: { plan: true },
   });
 
+  // Pass 1: attempt all auto-renewals before any cancellations so a
+  // successfully renewed sub is not mistakenly treated as expired in pass 2.
+  const renewedIds = new Set<string>();
   for (const sub of expired) {
-    if (sub.autoRenew && sub.plan.active) {
-      const cost = sub.plan.renewalTokenCost ?? sub.plan.tokenCost;
-      const newValidUntil = new Date(
-        now.getTime() + sub.plan.durationDays * 24 * 60 * 60 * 1000,
-      );
+    if (!sub.autoRenew || !sub.plan.active) continue;
 
-      const renewed = await prisma.$transaction(async (tx) => {
-        // Atomic test-and-set: only extend if still expired and not cancelled.
-        const claimed = await tx.subscription.updateMany({
-          where: { id: sub.id, validUntil: { lte: now }, cancelledAt: null },
-          data: { validUntil: newValidUntil },
-        });
-        if (claimed.count === 0) {
-          return false;
-        }
-        // Conditional debit: WHERE balance >= cost makes this atomic so two
-        // concurrent renewals for different subs cannot both drain the same balance.
-        const deducted = await tx.tokenBalance.updateMany({
-          where: { guildId_userId: { guildId, userId }, balance: { gte: cost } },
-          data: { balance: { decrement: cost } },
-        });
-        if (deducted.count === 0) {
-          // Insufficient balance; roll back the validUntil extension.
-          await tx.subscription.update({
-            where: { id: sub.id },
-            data: { validUntil: sub.validUntil },
-          });
-          return false;
-        }
-        await tx.tokenHistory.create({
-          data: {
-            guildId,
-            userId,
-            amount: -cost,
-            eventType: "subscription_renew",
-            eventId: sub.id,
-          },
-        });
-        return true;
+    const cost = sub.plan.renewalTokenCost ?? sub.plan.tokenCost;
+    const newValidUntil = new Date(
+      now.getTime() + sub.plan.durationDays * 24 * 60 * 60 * 1000,
+    );
+
+    const renewed = await prisma.$transaction(async (tx) => {
+      // Atomic test-and-set: only extend if still expired and not cancelled.
+      const claimed = await tx.subscription.updateMany({
+        where: { id: sub.id, validUntil: { lte: now }, cancelledAt: null },
+        data: { validUntil: newValidUntil },
       });
+      if (claimed.count === 0) {
+        return false;
+      }
+      // Conditional debit: WHERE balance >= cost is atomic so two concurrent
+      // renewals for different subs cannot both drain the same wallet.
+      const deducted = await tx.tokenBalance.updateMany({
+        where: { guildId_userId: { guildId, userId }, balance: { gte: cost } },
+        data: { balance: { decrement: cost } },
+      });
+      if (deducted.count === 0) {
+        // Insufficient balance; roll back the validUntil extension.
+        await tx.subscription.update({
+          where: { id: sub.id },
+          data: { validUntil: sub.validUntil },
+        });
+        return false;
+      }
+      await tx.tokenHistory.create({
+        data: {
+          guildId,
+          userId,
+          amount: -cost,
+          eventType: "subscription_renew",
+          eventId: sub.id,
+        },
+      });
+      return true;
+    });
 
-      if (renewed) continue;
+    if (renewed) {
+      renewedIds.add(sub.id);
+      // Re-grant the role in case it was revoked by an earlier cancellation
+      // in a prior batch that processed before this renewal succeeded.
+      if (sub.plan.roleId) {
+        await grantSubscriptionRole(guild, userId, sub.plan.roleId);
+      }
     }
+  }
+
+  // Pass 2: cancel remaining expired subs now that all renewals are settled.
+  for (const sub of expired) {
+    if (renewedIds.has(sub.id)) continue;
 
     // Guard with validUntil: still expired so a concurrently renewed row is never cancelled.
     const cancelled = await prisma.subscription.updateMany({
