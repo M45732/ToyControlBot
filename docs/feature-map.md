@@ -82,7 +82,7 @@ Suggested build order. Later phases depend on earlier ones.
 | Daily free token | `commands/economy/daily-free-token.js` | Migrated | `apps/bot/src/features/economy/` | Base 100 + booster +100 + patron +100, 24h cooldown, streak. Models `DailyToken`, `TokenHistory`. Verified-role gate is optional (skipped if `ROLE_VERIFIED_ID` unset) |
 | Token balance | `commands/economy/token-balance.js` | Migrated | `apps/bot/src/features/economy/` | `current` / `history` view via `/token-balance view:`. Dropped the `BanMembers` gate (see migration notes) |
 | Token toplist | `commands/economy/token-toplist.js` | Migrated | `apps/bot/src/features/economy/` | Paginated leaderboard with first/prev/next/last buttons, dispatched through the new button-handler registry |
-| Subscriptions | `commands/economy/subscriptions.js` | Not started | `apps/bot/src/features/subscriptions/` | Legacy is a stub. Decide whether to design properly or skip |
+| Subscriptions | `commands/economy/subscriptions.js`, `structures/commands/performerPanel.js` | Migrated (redesigned) | `apps/bot/src/features/subscriptions/` | Legacy was UI scaffolding only (no DB, broken query). Rebuilt as a token-priced fanclub: performers gate a **private thread**, members pay tokens to join, auto-renew sweep re-charges or revokes access. See the section below |
 
 ## Lovense control
 
@@ -138,6 +138,25 @@ Suggested build order. Later phases depend on earlier ones.
 | version | `commands/owner/version.js` | Migrated | `apps/bot/src/features/owner/` | `/version` — reads from `package.json` |
 | restart | `commands/owner/restart.js` | Migrated | `apps/bot/src/features/owner/` | `/restart` — owner-only; `process.exit(0)` for process manager restart |
 | Command deploy/remove (prefix) | `events/message/messageCreate.js` (`!deploy-*`, `!remove-*`) | Replaced | `npm run deploy-commands` | Replaced by the existing `deploy-commands` script |
+
+## Subscriptions (fanclubs)
+
+| Old Feature | Old Location | Status | New Location | Notes |
+|---|---|---|---|---|
+| Member subscription list | `commands/economy/subscriptions.js` | Migrated (redesigned) | `apps/bot/src/features/subscriptions/` | `/subscriptions` lists a member's active subscriptions (plan, price, renews-at, auto-renew, fanclub link) |
+| Subscribe to a performer | (new) | Added | `apps/bot/src/features/subscriptions/` | `/subscribe performer:@x` — atomic token charge (debit subscriber, credit performer), then add to the fanclub thread |
+| Cancel / auto-renew toggle | performer panel "Auto renew" intent | Migrated (redesigned) | `apps/bot/src/features/subscriptions/` | `/subscription-cancel` turns off auto-renew; access stays until the period ends |
+| Subscription setup | `performerPanel.js` (`subscriptionSetupModal`) | Migrated (redesigned) | `apps/bot/src/features/subscriptions/` | `/subscription-setup name price [thread] [description]` — one plan per performer, gated on a thread you own (or `ManageThreads`) |
+| Subscriber / income stats | `performerPanel.js` ("Active Subscriber" panel) | Migrated (redesigned) | `apps/bot/src/features/subscriptions/` | `/subscription-stats` — active subscribers, projected income, all-time subscribers, lifetime earned |
+| Auto-renew billing | "Auto renew: Yes" / "Renewal costs" comments | Added | `apps/bot/src/features/subscriptions/subscription.scheduler.ts` | Hourly sweep re-charges due auto-renew subs; lapses (and removes from thread) when auto-renew is off or the balance is too low |
+
+The premium space is a **private Discord thread**, not a dedicated channel:
+Discord caps channels per guild, so threads let a server host many fanclubs.
+Access is granted/revoked via thread membership (`thread.members.add/remove`).
+Token moves reuse `TokenBalance` / `TokenHistory` (event types
+`subscription_paid`, `subscription_renewal`, `subscription_income`) so a
+fanclub is a closed loop inside the existing economy. New Prisma models:
+`SubscriptionPlan`, `Subscription`.
 
 ## Per-feature behavior notes
 

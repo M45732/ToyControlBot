@@ -45,6 +45,14 @@ const dashboardButtonHandler: ButtonHandler = {
         });
         return;
 
+      case "subscriptions":
+        await interaction.reply({
+          content:
+            "Performers: set up a paid fanclub with `/subscription-setup` and track it with `/subscription-stats`. Members: browse with `/subscribe` and `/subscriptions`.",
+          ephemeral: true,
+        });
+        return;
+
       case "start-gangbang":
       case "start-orgy": {
         const mode = action === "start-gangbang" ? "gangbang" : "orgy";

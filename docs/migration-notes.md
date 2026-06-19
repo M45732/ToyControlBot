@@ -43,6 +43,9 @@ bot should be cleaner, safer, and easier to maintain.
 | Lovense `/api/lan/getQrCode` host | Mixed `apps.lovense.com` (commented out) and `api.lovense-api.com` calls across legacy files | Standardized on `api.lovense-api.com`, configurable via `LOVENSE_API_BASE_URL` | Legacy code had both hosts present (one commented out); picked the one actually in use and made it overridable instead of hardcoded |
 | Lovense API-down error reporting | Pinged a hardcoded Discord user ID (`<@244454602517381120>`) in a non-ephemeral channel message with the raw API error code | Throws a `UserFacingError` with a friendly message, shown ephemerally to the requesting user; the raw code/message is logged internally instead | Hardcoding a personal Discord ID is not portable across servers, and surfacing raw API errors/non-ephemeral messages doesn't fit the new error-handling convention (see `lib/errors.ts`) |
 | Toy battery reporting (`-1` battery) | Treated as `100%` inline in the QR/session embed code | Same behavior, moved into `lovense.service.ts` (`getConnectedToys`) | Preserved intentionally — some toys don't report battery and the API returns `-1` for them |
+| Subscriptions | UI scaffolding only: `/subscriptions` was a stub with a broken `toycontrol` query; the performer panel had a setup modal and stats panels but no persistence or billing | Full token-priced fanclub: `SubscriptionPlan` + `Subscription` Prisma models, `/subscribe`, `/subscriptions`, `/subscription-cancel`, `/subscription-setup`, `/subscription-stats`, and an hourly auto-renew sweep | Legacy never implemented it; rebuilt deliberately rather than ported |
+| Subscription access mechanism | Legacy comments referenced a "premium channel" + "Link to thread" | Access granted by **private-thread membership**, not a dedicated channel or role | Threads avoid the per-guild channel cap, so one server can host many fanclubs (raised in design review) |
+| Subscription billing | "Auto renew: Yes" / "Renewal costs: 1000 tokens" comments, never coded | Per-subscription `autoRenew` flag; hourly sweep charges due renewals from the token balance, lapsing + removing from the thread on insufficient funds or auto-renew off | Implements the documented intent; charge is conditional (`balance >= price`) so it can never go negative, transient errors retry next sweep instead of revoking access |
 
 > Add a row here whenever rebuilt behavior differs from the legacy bot.
 
@@ -50,7 +53,6 @@ bot should be cleaner, safer, and easier to maintain.
 
 | Feature | Old Location | Status / Reason |
 |---|---|---|
-| Subscriptions | `commands/economy/subscriptions.js` | Legacy is a stub; decide whether to design properly or drop |
 | Vibration pattern files | `assets/patterns/**` | Present but never parsed in legacy; only migrate if patterns are actually wanted |
 | DM handler | `handlers/dmMessage.js` | Referenced but unimplemented; clarify intent before building |
 | `_backup_dev/` experiments | `legacy/old-bot-readonly/_backup_dev/` | Dead/experimental code; reference only, do not migrate |
@@ -118,7 +120,8 @@ For each feature:
 
 | Question | Decision needed |
 |---|---|
-| Keep the subscriptions feature, or drop it? | Product decision |
+| Keep the subscriptions feature, or drop it? | Resolved: built as a token-priced, private-thread fanclub (see behavior-changes table) |
+| Should the 30-day period / hourly sweep interval be configurable? | Currently constants in `subscription.types.ts` / `subscription.scheduler.ts`; promote to env if guilds need different cadences |
 | Implement vibration pattern files, or skip? | Product decision |
 | Should `ping` / read-only commands keep the `BanMembers` gate? | Resolved: relaxed for `token-balance` / `token-toplist`. `ping` itself is not yet migrated |
 | One database per environment (dev/prod)? | Ops decision |
