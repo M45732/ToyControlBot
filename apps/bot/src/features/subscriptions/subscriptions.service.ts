@@ -48,8 +48,8 @@ export async function getPlanByName(
   guildId: string,
   name: string,
 ): Promise<SubscriptionPlanData | null> {
-  return prisma.subscriptionPlan.findUnique({
-    where: { guildId_name: { guildId, name } },
+  return prisma.subscriptionPlan.findFirst({
+    where: { guildId_name: { guildId, name }, active: true },
   });
 }
 
@@ -237,9 +237,9 @@ export async function processExpiredSubscriptions(
       if (renewed) continue;
     }
 
-    // Only the first concurrent request to reach here wins; the rest are no-ops.
+    // Guard with validUntil: still expired so a concurrently renewed row is never cancelled.
     const cancelled = await prisma.subscription.updateMany({
-      where: { id: sub.id, cancelledAt: null },
+      where: { id: sub.id, validUntil: { lte: now }, cancelledAt: null },
       data: { cancelledAt: now },
     });
 

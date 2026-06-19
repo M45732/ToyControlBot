@@ -57,9 +57,12 @@ export function buildSubscriptionsEmbed(
     return embed;
   }
 
+  const MAX_FIELDS = 25;
+  const displayed = subs.slice(0, MAX_FIELDS);
+  const overflow = subs.length - displayed.length;
   const activeIds = new Set(activeSubs.map((s) => s.id));
 
-  for (const sub of subs) {
+  for (const sub of displayed) {
     const isActive = activeIds.has(sub.id);
     const status = sub.cancelledAt
       ? "Expired"
@@ -73,6 +76,10 @@ export function buildSubscriptionsEmbed(
       `**Auto-renew:** ${sub.autoRenew ? "Yes" : "No"}`,
     ];
     embed.addFields({ name: sub.planName, value: lines.join("\n"), inline: false });
+  }
+
+  if (overflow > 0) {
+    embed.setFooter({ text: `${overflow} more entr${overflow !== 1 ? "ies" : "y"} not shown` });
   }
 
   return embed;
