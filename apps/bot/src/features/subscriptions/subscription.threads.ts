@@ -48,23 +48,29 @@ export async function addToThread(
 
 /**
  * Remove a member from a fanclub thread when their subscription lapses.
- * Best-effort and idempotent: missing membership or a deleted thread is fine.
+ *
+ * Returns whether access is now revoked. A deleted thread counts as revoked
+ * (access is gone either way). A failed `members.remove` returns false so the
+ * caller can keep the subscription retryable instead of marking it expired
+ * while the member still has access.
  */
 export async function removeFromThread(
   client: Client,
   threadId: string,
   userId: string,
-): Promise<void> {
+): Promise<boolean> {
   const channel = await client.channels.fetch(threadId).catch(() => null);
   if (!(channel instanceof ThreadChannel)) {
-    return;
+    return true;
   }
-  await channel.members
-    .remove(userId)
-    .catch((err: unknown) =>
-      log.warn(
-        { err, threadId, userId },
-        "Failed to remove subscriber from thread",
-      ),
+  try {
+    await channel.members.remove(userId);
+    return true;
+  } catch (err) {
+    log.warn(
+      { err, threadId, userId },
+      "Failed to remove subscriber from thread",
     );
+    return false;
+  }
 }

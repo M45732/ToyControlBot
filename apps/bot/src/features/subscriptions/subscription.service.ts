@@ -65,6 +65,25 @@ export async function upsertPlan(
     where: { guildId_performerId: { guildId, performerId } },
   });
 
+  // Moving the plan to a different thread would strand current subscribers:
+  // they'd keep (stale) access to the old thread and have none in the new one.
+  // Disallow it while anyone is actively subscribed rather than silently
+  // migrating memberships.
+  if (existing && existing.threadId !== threadId) {
+    const activeSubscribers = await prisma.subscription.count({
+      where: {
+        planId: existing.id,
+        status: "active",
+        expiresAt: { gt: new Date() },
+      },
+    });
+    if (activeSubscribers > 0) {
+      throw new UserFacingError(
+        `You can't move your fanclub to a different thread while you have ${activeSubscribers} active subscriber(s) — they'd lose access. You can still update the name, price, or description.`,
+      );
+    }
+  }
+
   await prisma.subscriptionPlan.upsert({
     where: { guildId_performerId: { guildId, performerId } },
     update: { name, description, priceTokens, threadId, active: true },
@@ -121,110 +140,117 @@ export async function subscribe(
       );
     }
 
-    // Confirm the thread is reachable before taking any tokens, so we never
-    // charge for access we can't grant.
-    const thread = await fetchThreadOrThrow(client, plan.threadId);
-
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SUBSCRIPTION_PERIOD_MS);
 
-    const result = await prisma.$transaction(async (tx) => {
-      const freshPlan = await tx.subscriptionPlan.findUnique({
-        where: { id: plan.id },
-      });
-      if (!freshPlan || !freshPlan.active) {
-        throw new UserFacingError(
-          "This performer hasn't set up a subscription yet.",
-        );
-      }
-
-      const existing = await tx.subscription.findUnique({
-        where: { planId_subscriberId: { planId: freshPlan.id, subscriberId } },
-      });
-      if (
-        existing &&
-        existing.status === "active" &&
-        existing.expiresAt > now
-      ) {
-        throw new UserFacingError(
-          `You're already subscribed — your access runs until <t:${toUnix(existing.expiresAt)}:D>.`,
-        );
-      }
-
-      const debit = await tx.tokenBalance.updateMany({
-        where: {
-          guildId,
-          userId: subscriberId,
-          balance: { gte: freshPlan.priceTokens },
-        },
-        data: { balance: { decrement: freshPlan.priceTokens } },
-      });
-      if (debit.count === 0) {
-        const row = await tx.tokenBalance.findUnique({
-          where: { guildId_userId: { guildId, userId: subscriberId } },
-        });
-        throw new UserFacingError(
-          `You need ${freshPlan.priceTokens} tokens to subscribe. Your balance is ${row?.balance ?? 0}.`,
-        );
-      }
-      await tx.tokenHistory.create({
-        data: {
-          guildId,
-          userId: subscriberId,
-          amount: -freshPlan.priceTokens,
-          eventType: EVENT_PAID,
-          eventId: freshPlan.id,
-        },
-      });
-
-      await creditPerformer(
-        tx,
-        guildId,
-        performerId,
-        freshPlan.priceTokens,
-        freshPlan.id,
-      );
-
-      await tx.subscription.upsert({
-        where: { planId_subscriberId: { planId: freshPlan.id, subscriberId } },
-        update: {
-          status: "active",
-          autoRenew: true,
-          expiresAt,
-          lastChargedAt: now,
-        },
-        create: {
-          planId: freshPlan.id,
-          subscriberId,
-          status: "active",
-          autoRenew: true,
-          expiresAt,
-          lastChargedAt: now,
-        },
-      });
-
-      const balanceRow = await tx.tokenBalance.findUnique({
-        where: { guildId_userId: { guildId, userId: subscriberId } },
-      });
-
-      return {
-        planName: freshPlan.name,
-        performerId,
-        priceTokens: freshPlan.priceTokens,
-        expiresAt,
-        subscriberNewBalance: balanceRow?.balance ?? 0,
-        renewed: existing !== null,
-      } satisfies SubscribeResult;
+    // Reject up front if they already have live access. The per-user lock above
+    // means no concurrent subscribe can change this between here and the charge.
+    const existing = await prisma.subscription.findUnique({
+      where: { planId_subscriberId: { planId: plan.id, subscriberId } },
     });
+    if (existing && existing.status === "active" && existing.expiresAt > now) {
+      throw new UserFacingError(
+        `You're already subscribed — your access runs until <t:${toUnix(existing.expiresAt)}:D>.`,
+      );
+    }
 
-    // Side-effect after the charge commits. Best-effort: a failure is logged,
-    // not thrown, so the performer keeps the (earned) tokens.
+    // Grant access *before* taking any tokens, so a member can never be charged
+    // for a fanclub they couldn't be added to. If the add fails (e.g. the bot
+    // lacks permission on the private thread) we abort without charging.
+    const thread = await fetchThreadOrThrow(client, plan.threadId);
     const added = await addToThread(thread, subscriberId);
     if (!added) {
-      log.warn(
-        { guildId, performerId, subscriberId },
-        "Subscribed but thread add failed",
+      throw new UserFacingError(
+        "Couldn't add you to the fanclub thread — the bot may be missing access there. You were not charged.",
       );
+    }
+
+    let result: SubscribeResult;
+    try {
+      result = await prisma.$transaction(async (tx) => {
+        const freshPlan = await tx.subscriptionPlan.findUnique({
+          where: { id: plan.id },
+        });
+        if (!freshPlan || !freshPlan.active) {
+          throw new UserFacingError(
+            "This performer hasn't set up a subscription yet.",
+          );
+        }
+
+        const debit = await tx.tokenBalance.updateMany({
+          where: {
+            guildId,
+            userId: subscriberId,
+            balance: { gte: freshPlan.priceTokens },
+          },
+          data: { balance: { decrement: freshPlan.priceTokens } },
+        });
+        if (debit.count === 0) {
+          const row = await tx.tokenBalance.findUnique({
+            where: { guildId_userId: { guildId, userId: subscriberId } },
+          });
+          throw new UserFacingError(
+            `You need ${freshPlan.priceTokens} tokens to subscribe. Your balance is ${row?.balance ?? 0}.`,
+          );
+        }
+        await tx.tokenHistory.create({
+          data: {
+            guildId,
+            userId: subscriberId,
+            amount: -freshPlan.priceTokens,
+            eventType: EVENT_PAID,
+            eventId: freshPlan.id,
+          },
+        });
+
+        await creditPerformer(
+          tx,
+          guildId,
+          performerId,
+          freshPlan.priceTokens,
+          freshPlan.id,
+        );
+
+        await tx.subscription.upsert({
+          where: {
+            planId_subscriberId: { planId: freshPlan.id, subscriberId },
+          },
+          update: {
+            status: "active",
+            autoRenew: true,
+            expiresAt,
+            lastChargedAt: now,
+          },
+          create: {
+            planId: freshPlan.id,
+            subscriberId,
+            status: "active",
+            autoRenew: true,
+            expiresAt,
+            lastChargedAt: now,
+          },
+        });
+
+        const balanceRow = await tx.tokenBalance.findUnique({
+          where: { guildId_userId: { guildId, userId: subscriberId } },
+        });
+
+        return {
+          planName: freshPlan.name,
+          performerId,
+          priceTokens: freshPlan.priceTokens,
+          expiresAt,
+          subscriberNewBalance: balanceRow?.balance ?? 0,
+          renewed: existing !== null,
+        } satisfies SubscribeResult;
+      });
+    } catch (err) {
+      // The charge failed (e.g. insufficient balance) after we granted thread
+      // access. Revoke it so a non-paying user isn't left in the thread — safe
+      // because we pre-checked they had no active subscription and hold the
+      // per-user lock, so they had no prior claim to this thread.
+      await removeFromThread(client, plan.threadId, subscriberId);
+      throw err;
     }
 
     return result;
@@ -422,11 +448,26 @@ async function chargeRenewal(
 }
 
 async function lapse(client: Client, sub: SubscriptionWithPlan): Promise<void> {
+  // Revoke thread access first. Only finalize the subscription as expired once
+  // the member is actually out — otherwise we'd stop selecting it (sweeps only
+  // look at "active" rows) and leave them with paid-tier access for free. If
+  // removal fails we leave the row active+due so the next sweep retries.
+  const removed = await removeFromThread(
+    client,
+    sub.plan.threadId,
+    sub.subscriberId,
+  );
+  if (!removed) {
+    log.warn(
+      { subscriptionId: sub.id },
+      "Deferring lapse — thread removal failed; will retry next sweep",
+    );
+    return;
+  }
   await prisma.subscription.update({
     where: { id: sub.id },
     data: { status: "expired" },
   });
-  await removeFromThread(client, sub.plan.threadId, sub.subscriberId);
   log.info({ subscriptionId: sub.id }, "Subscription lapsed");
 }
 
