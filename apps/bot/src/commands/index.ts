@@ -9,6 +9,7 @@ import { economyCommands } from "../features/economy/economy.commands.js";
 import { lovenseCommands } from "../features/lovense/lovense.commands.js";
 import { sessionCommands } from "../features/lovense/session.commands.js";
 import { ownerCommands } from "../features/owner/owner.commands.js";
+import { subscriptionCommands } from "../features/subscriptions/subscriptions.commands.js";
 import { tippingCommands } from "../features/tipping/tipping.commands.js";
 import { utilityCommands } from "../features/utility/utility.commands.js";
 
@@ -38,6 +39,7 @@ export const commands: SlashCommand[] = [
   ...dashboardCommands,
   ...utilityCommands,
   ...ownerCommands,
+  ...subscriptionCommands,
 ];
 
 /**

@@ -82,7 +82,7 @@ Suggested build order. Later phases depend on earlier ones.
 | Daily free token | `commands/economy/daily-free-token.js` | Migrated | `apps/bot/src/features/economy/` | Base 100 + booster +100 + patron +100, 24h cooldown, streak. Models `DailyToken`, `TokenHistory`. Verified-role gate is optional (skipped if `ROLE_VERIFIED_ID` unset) |
 | Token balance | `commands/economy/token-balance.js` | Migrated | `apps/bot/src/features/economy/` | `current` / `history` view via `/token-balance view:`. Dropped the `BanMembers` gate (see migration notes) |
 | Token toplist | `commands/economy/token-toplist.js` | Migrated | `apps/bot/src/features/economy/` | Paginated leaderboard with first/prev/next/last buttons, dispatched through the new button-handler registry |
-| Subscriptions | `commands/economy/subscriptions.js` | Not started | `apps/bot/src/features/subscriptions/` | Legacy is a stub. Decide whether to design properly or skip |
+| Subscriptions | `commands/economy/subscriptions.js` | Migrated | `apps/bot/src/features/subscriptions/` | Redesigned from scratch (legacy was a stub). Plans created by admins, purchased with tokens, optional role grant, auto-renewal. Lazy expiry checking. |
 
 ## Lovense control
 

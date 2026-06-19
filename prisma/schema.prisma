@@ -109,6 +109,42 @@ model RaffleParticipant {
   @@unique([raffleId, userId])
 }
 
+/// A subscription plan created by guild admins.
+model SubscriptionPlan {
+  id               String         @id @default(cuid())
+  guildId          String
+  name             String
+  description      String?
+  tokenCost        Int
+  durationDays     Int
+  renewalTokenCost Int?
+  roleId           String?
+  active           Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+
+  subscriptions    Subscription[]
+
+  @@unique([guildId, name])
+  @@index([guildId, active])
+}
+
+/// A member's active or past subscription to a plan.
+model Subscription {
+  id          String           @id @default(cuid())
+  guildId     String
+  userId      String
+  planId      String
+  autoRenew   Boolean          @default(false)
+  validUntil  DateTime
+  cancelledAt DateTime?
+  createdAt   DateTime         @default(now())
+
+  plan        SubscriptionPlan @relation(fields: [planId], references: [id])
+
+  @@index([guildId, userId])
+  @@index([guildId, validUntil])
+}
+
 /// A tip transaction recorded during a toy-control tip session.
 model TipHistory {
   id         String   @id @default(cuid())
