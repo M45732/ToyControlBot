@@ -24,6 +24,18 @@ export async function fetchThreadOrThrow(
 }
 
 /**
+ * Whether a fanclub thread still exists and is reachable by the bot. Used by
+ * the renewal sweep to avoid charging for access it can no longer deliver.
+ */
+export async function isThreadReachable(
+  client: Client,
+  threadId: string,
+): Promise<boolean> {
+  const channel = await client.channels.fetch(threadId).catch(() => null);
+  return channel instanceof ThreadChannel;
+}
+
+/**
  * Add a subscriber to the fanclub thread. Best-effort: a failure here (e.g.
  * the bot lacks access to the private thread) is logged, not thrown, so the
  * already-committed token charge isn't lost — callers surface a soft warning.

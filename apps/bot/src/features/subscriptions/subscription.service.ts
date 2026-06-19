@@ -7,6 +7,7 @@ import { createLogger } from "../../lib/logger.js";
 import {
   addToThread,
   fetchThreadOrThrow,
+  isThreadReachable,
   removeFromThread,
 } from "./subscription.threads.js";
 import {
@@ -174,6 +175,15 @@ export async function subscribe(
         if (!freshPlan || !freshPlan.active) {
           throw new UserFacingError(
             "This performer hasn't set up a subscription yet.",
+          );
+        }
+        // The performer may have moved the plan to a different thread between
+        // our addToThread() above and now. We only granted access to the thread
+        // we read earlier, so refuse to charge for a different one — the outer
+        // catch revokes the access we did grant.
+        if (freshPlan.threadId !== plan.threadId) {
+          throw new UserFacingError(
+            "This fanclub was just reconfigured. Please try again.",
           );
         }
 
@@ -382,10 +392,18 @@ export async function renewDueSubscriptions(client: Client): Promise<void> {
         await lapse(client, sub);
         continue;
       }
-      const charged = await chargeRenewal(sub, now);
-      if (!charged) {
+      // Don't bill for a fanclub we can no longer deliver: if the thread was
+      // deleted or the bot lost access, lapse without charging (mirrors the
+      // up-front check on the subscribe path).
+      if (!(await isThreadReachable(client, sub.plan.threadId))) {
+        await lapse(client, sub);
+        continue;
+      }
+      const outcome = await chargeRenewal(sub, now);
+      if (outcome === "insufficient") {
         await lapse(client, sub);
       }
+      // "charged" or "claimed-elsewhere": nothing more to do.
     } catch (err) {
       log.error(
         { err, subscriptionId: sub.id },
@@ -397,54 +415,84 @@ export async function renewDueSubscriptions(client: Client): Promise<void> {
 
 type SubscriptionWithPlan = Subscription & { plan: SubscriptionPlan };
 
+type RenewalOutcome = "charged" | "insufficient" | "claimed-elsewhere";
+
+/** A concurrent processor already renewed this period; abort without charging. */
+class AlreadyClaimedError extends Error {}
+/** The subscriber can't afford the renewal; the caller should lapse. */
+class InsufficientBalanceError extends Error {}
+
 /**
- * Attempt one auto-renew charge. Returns false (without writing) when the
- * subscriber can't afford the price, so the caller can lapse the subscription.
+ * Attempt one auto-renew charge.
+ *
+ * The due period is *claimed* first via a conditional update on the row's
+ * current `expiresAt`, before any token movement. If a concurrent sweep (or a
+ * manual re-subscribe) already advanced the period, our claim matches zero rows
+ * and we bail without charging — so the same period can never be billed twice,
+ * and we never lapse a subscription another processor just paid.
  */
 async function chargeRenewal(
   sub: SubscriptionWithPlan,
   now: Date,
-): Promise<boolean> {
+): Promise<RenewalOutcome> {
   const { plan } = sub;
   // Extend from the later of "now" and the old expiry so a backlog of missed
   // sweeps doesn't shorten a paid period.
   const base = Math.max(sub.expiresAt.getTime(), now.getTime());
   const newExpiry = new Date(base + SUBSCRIPTION_PERIOD_MS);
 
-  return prisma.$transaction(async (tx) => {
-    const debit = await tx.tokenBalance.updateMany({
-      where: {
-        guildId: plan.guildId,
-        userId: sub.subscriberId,
-        balance: { gte: plan.priceTokens },
-      },
-      data: { balance: { decrement: plan.priceTokens } },
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Claim the period: only the processor that still sees the expiry we read
+      // wins. This also rolls back (reverting the expiry) if the debit below
+      // fails, so an insufficient balance never leaves a half-renewed row.
+      const claim = await tx.subscription.updateMany({
+        where: { id: sub.id, status: "active", expiresAt: sub.expiresAt },
+        data: { expiresAt: newExpiry, lastChargedAt: now },
+      });
+      if (claim.count === 0) {
+        throw new AlreadyClaimedError();
+      }
+
+      const debit = await tx.tokenBalance.updateMany({
+        where: {
+          guildId: plan.guildId,
+          userId: sub.subscriberId,
+          balance: { gte: plan.priceTokens },
+        },
+        data: { balance: { decrement: plan.priceTokens } },
+      });
+      if (debit.count === 0) {
+        throw new InsufficientBalanceError();
+      }
+
+      await tx.tokenHistory.create({
+        data: {
+          guildId: plan.guildId,
+          userId: sub.subscriberId,
+          amount: -plan.priceTokens,
+          eventType: EVENT_RENEWAL,
+          eventId: plan.id,
+        },
+      });
+      await creditPerformer(
+        tx,
+        plan.guildId,
+        plan.performerId,
+        plan.priceTokens,
+        plan.id,
+      );
     });
-    if (debit.count === 0) {
-      return false;
+    return "charged";
+  } catch (err) {
+    if (err instanceof AlreadyClaimedError) {
+      return "claimed-elsewhere";
     }
-    await tx.tokenHistory.create({
-      data: {
-        guildId: plan.guildId,
-        userId: sub.subscriberId,
-        amount: -plan.priceTokens,
-        eventType: EVENT_RENEWAL,
-        eventId: plan.id,
-      },
-    });
-    await creditPerformer(
-      tx,
-      plan.guildId,
-      plan.performerId,
-      plan.priceTokens,
-      plan.id,
-    );
-    await tx.subscription.update({
-      where: { id: sub.id },
-      data: { expiresAt: newExpiry, lastChargedAt: now },
-    });
-    return true;
-  });
+    if (err instanceof InsufficientBalanceError) {
+      return "insufficient";
+    }
+    throw err;
+  }
 }
 
 async function lapse(client: Client, sub: SubscriptionWithPlan): Promise<void> {
