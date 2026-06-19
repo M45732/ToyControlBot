@@ -139,13 +139,13 @@ const subscriptionCancelCommand: SlashCommand = {
         .setRequired(true),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await requireGuildMember(interaction);
+    const member = await requireGuildMember(interaction);
     const guildId = interaction.guildId!;
     const userId = interaction.user.id;
 
     const planName = interaction.options.getString("plan_name", true);
 
-    const cancelled = await cancelAutoRenew(guildId, userId, planName);
+    const cancelled = await cancelAutoRenew(guildId, userId, planName, member.guild);
 
     if (!cancelled) {
       throw new UserFacingError(

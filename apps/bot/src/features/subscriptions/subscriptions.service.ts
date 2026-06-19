@@ -147,11 +147,13 @@ export async function cancelAutoRenew(
   guildId: string,
   userId: string,
   planName: string,
+  guild: Guild,
 ): Promise<boolean> {
-  // No validUntil filter: also clears auto-renewal on expired-but-unprocessed rows
-  // so a user who cancels before lazy processing isn't charged on the next call.
+  const now = new Date();
+
+  // No validUntil filter: also clears auto-renewal on expired-but-unprocessed rows.
   // Does not filter plan.active so subscribers to deactivated plans can still cancel.
-  const result = await prisma.subscription.updateMany({
+  const disabled = await prisma.subscription.updateMany({
     where: {
       guildId,
       userId,
@@ -162,7 +164,50 @@ export async function cancelAutoRenew(
     data: { autoRenew: false },
   });
 
-  return result.count > 0;
+  if (disabled.count === 0) return false;
+
+  // Mark any already-expired rows cancelled and revoke the role if no other
+  // active subscription still grants it.
+  const expiredRows = await prisma.subscription.findMany({
+    where: {
+      guildId,
+      userId,
+      cancelledAt: null,
+      validUntil: { lte: now },
+      plan: { guildId, name: planName },
+    },
+    include: { plan: true },
+  });
+
+  for (const sub of expiredRows) {
+    await prisma.subscription.update({
+      where: { id: sub.id },
+      data: { cancelledAt: now },
+    });
+
+    if (sub.plan.roleId) {
+      const otherActive = await prisma.subscription.findFirst({
+        where: {
+          guildId,
+          userId,
+          id: { not: sub.id },
+          cancelledAt: null,
+          validUntil: { gt: now },
+          plan: { roleId: sub.plan.roleId },
+        },
+      });
+      if (!otherActive) {
+        try {
+          const member = await guild.members.fetch(userId);
+          await member.roles.remove(sub.plan.roleId);
+        } catch {
+          // Member may have left the guild; ignore role removal failure.
+        }
+      }
+    }
+  }
+
+  return true;
 }
 
 export async function getUserSubscriptions(
@@ -213,10 +258,10 @@ export async function processExpiredSubscriptions(
       if (claimed.count === 0) {
         return false;
       }
-      // Conditional debit: WHERE balance >= cost is atomic so two concurrent
-      // renewals for different subs cannot both drain the same wallet.
+      // Conditional debit: scalar WHERE + balance >= cost is atomic so two
+      // concurrent renewals for different subs cannot both drain the same wallet.
       const deducted = await tx.tokenBalance.updateMany({
-        where: { guildId_userId: { guildId, userId }, balance: { gte: cost } },
+        where: { guildId, userId, balance: { gte: cost } },
         data: { balance: { decrement: cost } },
       });
       if (deducted.count === 0) {
