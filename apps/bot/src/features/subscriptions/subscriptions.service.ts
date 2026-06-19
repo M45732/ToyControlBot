@@ -250,9 +250,10 @@ export async function processExpiredSubscriptions(
     );
 
     const renewed = await prisma.$transaction(async (tx) => {
-      // Atomic test-and-set: only extend if still expired and not cancelled.
+      // Atomic test-and-set: only extend if still expired, not cancelled, and
+      // autoRenew is still true (guards against a concurrent /subscription-cancel).
       const claimed = await tx.subscription.updateMany({
-        where: { id: sub.id, validUntil: { lte: now }, cancelledAt: null },
+        where: { id: sub.id, validUntil: { lte: now }, cancelledAt: null, autoRenew: true },
         data: { validUntil: newValidUntil },
       });
       if (claimed.count === 0) {

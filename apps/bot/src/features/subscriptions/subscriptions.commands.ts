@@ -207,7 +207,7 @@ const subscriptionCreateCommand: SlashCommand = {
         .setMinValue(1),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await requireGuildMember(interaction);
+    const member = await requireGuildMember(interaction);
     const guildId = interaction.guildId!;
 
     const name = interaction.options.getString("name", true);
@@ -218,6 +218,16 @@ const subscriptionCreateCommand: SlashCommand = {
     const renewalCost = interaction.options.getInteger("renewal_cost") ?? undefined;
 
     if (role) {
+      if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        throw new UserFacingError(
+          "You need the **Manage Roles** permission to create a plan that grants a role.",
+        );
+      }
+      if (role.position >= member.roles.highest.position) {
+        throw new UserFacingError(
+          `You cannot assign the role **${role.name}** because it is at or above your highest role.`,
+        );
+      }
       const botMember = await interaction.guild!.members.fetchMe();
       if (role.position >= botMember.roles.highest.position) {
         throw new UserFacingError(
