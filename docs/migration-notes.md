@@ -50,7 +50,7 @@ bot should be cleaner, safer, and easier to maintain.
 
 | Feature | Old Location | Status / Reason |
 |---|---|---|
-| Subscriptions | `commands/economy/subscriptions.js` | Legacy is a stub; decide whether to design properly or drop |
+| Subscriptions | `commands/economy/subscriptions.js` | **Redesigned and implemented.** Full token-gated subscription system with plans, auto-renewal, and Discord role grants. See `apps/bot/src/features/subscriptions/`. |
 | Vibration pattern files | `assets/patterns/**` | Present but never parsed in legacy; only migrate if patterns are actually wanted |
 | DM handler | `handlers/dmMessage.js` | Referenced but unimplemented; clarify intent before building |
 | `_backup_dev/` experiments | `legacy/old-bot-readonly/_backup_dev/` | Dead/experimental code; reference only, do not migrate |
@@ -118,7 +118,7 @@ For each feature:
 
 | Question | Decision needed |
 |---|---|
-| Keep the subscriptions feature, or drop it? | Product decision |
+| Keep the subscriptions feature, or drop it? | **Resolved: implemented.** Token-gated plans with role grants. |
 | Implement vibration pattern files, or skip? | Product decision |
 | Should `ping` / read-only commands keep the `BanMembers` gate? | Resolved: relaxed for `token-balance` / `token-toplist`. `ping` itself is not yet migrated |
 | One database per environment (dev/prod)? | Ops decision |

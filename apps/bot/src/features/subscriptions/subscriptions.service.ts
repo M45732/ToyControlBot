@@ -2,6 +2,9 @@ import type { Client, Guild } from "discord.js";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../services/database.service.js";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger("subscriptions");
 import type {
   BuyResult,
   RenewResult,
@@ -395,6 +398,8 @@ export async function sweepExpiredSubscriptions(client: Client): Promise<void> {
   for (const { guildId, userId } of rows) {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) continue;
-    await processExpiredSubscriptions(guildId, userId, guild).catch(() => {});
+    await processExpiredSubscriptions(guildId, userId, guild).catch((err: unknown) => {
+      log.error({ err, guildId, userId }, "Failed to process expired subscriptions for user");
+    });
   }
 }
