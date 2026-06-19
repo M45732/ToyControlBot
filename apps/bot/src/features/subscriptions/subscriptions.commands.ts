@@ -145,6 +145,8 @@ const subscriptionCancelCommand: SlashCommand = {
 
     const planName = interaction.options.getString("plan_name", true);
 
+    await interaction.deferReply({ ephemeral: true });
+
     const cancelled = await cancelAutoRenew(guildId, userId, planName, member.guild);
 
     if (!cancelled) {
@@ -153,9 +155,8 @@ const subscriptionCancelCommand: SlashCommand = {
       );
     }
 
-    await interaction.reply({
+    await interaction.editReply({
       content: `Auto-renewal has been disabled for **${planName}**. Your subscription will remain active until it expires.`,
-      ephemeral: true,
     });
   },
 };

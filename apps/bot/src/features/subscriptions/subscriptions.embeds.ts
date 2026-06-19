@@ -15,11 +15,16 @@ export function buildPlansEmbed(plans: SubscriptionPlanData[]): EmbedBuilder {
     return embed;
   }
 
+  // Discord's hard embed limit is 6000 characters total. Stay under it even
+  // when plans have long names (max 100) and descriptions (max 300).
+  const EMBED_CHAR_BUDGET = 5800;
   const MAX_FIELDS = 25;
-  const displayed = plans.slice(0, MAX_FIELDS);
-  const overflow = plans.length - displayed.length;
+  let charCount = 0;
+  let shown = 0;
 
-  for (const plan of displayed) {
+  for (const plan of plans) {
+    if (shown >= MAX_FIELDS) break;
+
     const lines: string[] = [
       `**Cost:** ${plan.tokenCost} token`,
       `**Duration:** ${plan.durationDays} day${plan.durationDays !== 1 ? "s" : ""}`,
@@ -33,9 +38,16 @@ export function buildPlansEmbed(plans: SubscriptionPlanData[]): EmbedBuilder {
     if (plan.description) {
       lines.push(plan.description);
     }
-    embed.addFields({ name: plan.name, value: lines.join("\n"), inline: false });
+    const value = lines.join("\n");
+    const fieldChars = plan.name.length + value.length;
+    if (charCount + fieldChars > EMBED_CHAR_BUDGET) break;
+
+    embed.addFields({ name: plan.name, value, inline: false });
+    charCount += fieldChars;
+    shown++;
   }
 
+  const overflow = plans.length - shown;
   if (overflow > 0) {
     embed.setFooter({ text: `${overflow} more plan${overflow !== 1 ? "s" : ""} not shown` });
   }
