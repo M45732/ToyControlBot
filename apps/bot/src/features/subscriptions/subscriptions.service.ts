@@ -204,12 +204,6 @@ export async function processExpiredSubscriptions(
       );
 
       const renewed = await prisma.$transaction(async (tx) => {
-        const balanceRow = await tx.tokenBalance.findUnique({
-          where: { guildId_userId: { guildId, userId } },
-        });
-        if ((balanceRow?.balance ?? 0) < cost) {
-          return false;
-        }
         // Atomic test-and-set: only extend if still expired and not cancelled.
         const claimed = await tx.subscription.updateMany({
           where: { id: sub.id, validUntil: { lte: now }, cancelledAt: null },
@@ -218,10 +212,20 @@ export async function processExpiredSubscriptions(
         if (claimed.count === 0) {
           return false;
         }
-        await tx.tokenBalance.update({
-          where: { guildId_userId: { guildId, userId } },
+        // Conditional debit: WHERE balance >= cost makes this atomic so two
+        // concurrent renewals for different subs cannot both drain the same balance.
+        const deducted = await tx.tokenBalance.updateMany({
+          where: { guildId_userId: { guildId, userId }, balance: { gte: cost } },
           data: { balance: { decrement: cost } },
         });
+        if (deducted.count === 0) {
+          // Insufficient balance; roll back the validUntil extension.
+          await tx.subscription.update({
+            where: { id: sub.id },
+            data: { validUntil: sub.validUntil },
+          });
+          return false;
+        }
         await tx.tokenHistory.create({
           data: {
             guildId,
@@ -244,11 +248,23 @@ export async function processExpiredSubscriptions(
     });
 
     if (cancelled.count > 0 && sub.plan.roleId) {
-      try {
-        const member = await guild.members.fetch(userId);
-        await member.roles.remove(sub.plan.roleId);
-      } catch {
-        // Member may have left the guild; ignore role removal failure.
+      const otherActive = await prisma.subscription.findFirst({
+        where: {
+          guildId,
+          userId,
+          id: { not: sub.id },
+          cancelledAt: null,
+          validUntil: { gt: now },
+          plan: { roleId: sub.plan.roleId },
+        },
+      });
+      if (!otherActive) {
+        try {
+          const member = await guild.members.fetch(userId);
+          await member.roles.remove(sub.plan.roleId);
+        } catch {
+          // Member may have left the guild; ignore role removal failure.
+        }
       }
     }
   }
