@@ -9,8 +9,35 @@ const log = createLogger("subscriptions");
 const UNKNOWN_CHANNEL = 10003;
 const UNKNOWN_MEMBER = 10007;
 
+// Bounded retry for non-transactional Discord membership ops, so a transient
+// API failure or brief permission blip doesn't permanently desync thread
+// membership from the database. Persistent failures (e.g. the bot genuinely
+// lacks access) still surface as a final `false` for the caller to log/handle.
+const MEMBERSHIP_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 250;
+
 function isDiscordErrorCode(err: unknown, code: number): boolean {
   return err instanceof DiscordAPIError && err.code === code;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Run a membership op that returns `true` on success / `false` on a transient
+ * failure, retrying with linear backoff until it succeeds or attempts run out.
+ */
+async function withRetry(op: () => Promise<boolean>): Promise<boolean> {
+  for (let attempt = 1; attempt <= MEMBERSHIP_RETRIES; attempt += 1) {
+    if (await op()) {
+      return true;
+    }
+    if (attempt < MEMBERSHIP_RETRIES) {
+      await delay(RETRY_BASE_DELAY_MS * attempt);
+    }
+  }
+  return false;
 }
 
 /**
@@ -103,16 +130,21 @@ export async function addToThread(
   thread: ThreadChannel,
   userId: string,
 ): Promise<boolean> {
-  try {
-    await thread.members.add(userId);
-    return true;
-  } catch (err) {
+  const ok = await withRetry(async () => {
+    try {
+      await thread.members.add(userId);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (!ok) {
     log.warn(
-      { err, threadId: thread.id, userId },
-      "Failed to add subscriber to thread",
+      { threadId: thread.id, userId },
+      "Failed to add subscriber to thread after retries",
     );
-    return false;
   }
+  return ok;
 }
 
 /**
@@ -124,6 +156,23 @@ export async function addToThread(
  * finalizing it while the member may still have access.
  */
 export async function removeFromThread(
+  client: Client,
+  threadId: string,
+  userId: string,
+): Promise<boolean> {
+  const ok = await withRetry(() =>
+    removeFromThreadOnce(client, threadId, userId),
+  );
+  if (!ok) {
+    log.warn(
+      { threadId, userId },
+      "Failed to remove subscriber from thread after retries",
+    );
+  }
+  return ok;
+}
+
+async function removeFromThreadOnce(
   client: Client,
   threadId: string,
   userId: string,
@@ -142,10 +191,6 @@ export async function removeFromThread(
     if (isDiscordErrorCode(err, UNKNOWN_MEMBER)) {
       return true; // already not a member → access is revoked
     }
-    log.warn(
-      { err, threadId, userId },
-      "Failed to remove subscriber from thread; will retry",
-    );
     return false;
   }
 }

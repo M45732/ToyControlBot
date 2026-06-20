@@ -49,6 +49,12 @@ function toUnix(date: Date): number {
   return Math.floor(date.getTime() / 1000);
 }
 
+function activeSubscriberMoveError(): UserFacingError {
+  return new UserFacingError(
+    "You can't move your fanclub to a different thread while you have active subscriber(s) — they'd lose access. You can still update the name, price, or description.",
+  );
+}
+
 /**
  * Create or update a performer's subscription plan (their "fanclub").
  *
@@ -76,30 +82,46 @@ export async function upsertPlan(
   const existing = await prisma.subscriptionPlan.findUnique({
     where: { guildId_performerId: { guildId, performerId } },
   });
+  const movingThread = existing != null && existing.threadId !== threadId;
 
   // Moving the plan to a different thread would strand current subscribers:
   // they'd keep (stale) access to the old thread and have none in the new one.
   // Disallow it while anyone is actively subscribed rather than silently
-  // migrating memberships.
-  if (existing && existing.threadId !== threadId) {
-    const activeSubscribers = await prisma.subscription.count({
-      where: {
-        planId: existing.id,
-        status: "active",
-        expiresAt: { gt: new Date() },
+  // migrating memberships. The count + write run in one transaction and the
+  // count is re-checked after the write, so a subscription created concurrently
+  // with the move is caught (the move aborts) instead of stranding the member.
+  await prisma.$transaction(async (tx) => {
+    const countActive = (): Promise<number> =>
+      tx.subscription.count({
+        where: {
+          planId: existing!.id,
+          status: "active",
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+    if (movingThread && (await countActive()) > 0) {
+      throw activeSubscriberMoveError();
+    }
+
+    await tx.subscriptionPlan.upsert({
+      where: { guildId_performerId: { guildId, performerId } },
+      update: { name, description, priceTokens, threadId, active: true },
+      create: {
+        guildId,
+        performerId,
+        name,
+        description,
+        priceTokens,
+        threadId,
       },
     });
-    if (activeSubscribers > 0) {
-      throw new UserFacingError(
-        `You can't move your fanclub to a different thread while you have ${activeSubscribers} active subscriber(s) — they'd lose access. You can still update the name, price, or description.`,
-      );
-    }
-  }
 
-  await prisma.subscriptionPlan.upsert({
-    where: { guildId_performerId: { guildId, performerId } },
-    update: { name, description, priceTokens, threadId, active: true },
-    create: { guildId, performerId, name, description, priceTokens, threadId },
+    if (movingThread && (await countActive()) > 0) {
+      // A member subscribed during the move — roll back so the performer retries
+      // rather than leaving the new subscriber stranded in the old thread.
+      throw activeSubscriberMoveError();
+    }
   });
 
   return { created: existing === null };
@@ -599,6 +621,26 @@ async function lapse(client: Client, sub: SubscriptionWithPlan): Promise<void> {
     );
     return;
   }
+
+  // We expired then revoked. If a /subscribe renewed this row (expired → active)
+  // in the window before our removal landed, restore the access we just took —
+  // they've paid through a future date.
+  const after = await prisma.subscription.findUnique({
+    where: { id: sub.id },
+    select: { status: true, expiresAt: true },
+  });
+  if (after && after.status === "active" && after.expiresAt > new Date()) {
+    const resolution = await resolveThread(client, sub.plan.threadId);
+    if (resolution.state === "ok") {
+      await addToThread(resolution.thread, sub.subscriberId);
+    }
+    log.info(
+      { subscriptionId: sub.id },
+      "Lapse raced a renewal — re-added member to thread",
+    );
+    return;
+  }
+
   log.info({ subscriptionId: sub.id }, "Subscription lapsed");
 }
 
