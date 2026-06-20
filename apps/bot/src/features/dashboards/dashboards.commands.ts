@@ -73,6 +73,7 @@ const setupPerformerDashboardCommand: SlashCommand = {
         },
         { name: "Tipping", value: "Members can tip you with `/tip` during an active session." },
         { name: "Connect Toy", value: "Pair your Lovense toy via QR code." },
+        { name: "Subscriptions", value: "Run a paid fanclub with `/subscription-setup`." },
       );
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -87,6 +88,10 @@ const setupPerformerDashboardCommand: SlashCommand = {
       new ButtonBuilder()
         .setCustomId("dashboard:connect-toy")
         .setLabel("Connect Toy")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("dashboard:subscriptions")
+        .setLabel("Subscriptions")
         .setStyle(ButtonStyle.Secondary),
     );
 

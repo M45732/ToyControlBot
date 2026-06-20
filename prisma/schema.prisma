@@ -109,6 +109,53 @@ model RaffleParticipant {
   @@unique([raffleId, userId])
 }
 
+/// A performer's paid subscription plan ("fanclub").
+///
+/// Access is granted by adding/removing the subscriber from a private Discord
+/// thread (`threadId`) rather than a dedicated channel, so a guild can host
+/// many fanclubs without hitting the per-guild channel limit. One active plan
+/// per performer per guild.
+model SubscriptionPlan {
+  id          String   @id @default(cuid())
+  guildId     String
+  performerId String
+  name        String
+  description String?
+  priceTokens Int
+  threadId    String   @unique
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@unique([guildId, performerId])
+  @@index([guildId, active])
+}
+
+/// A member's subscription to a performer's plan.
+///
+/// `expiresAt` is the end of the currently paid period. The renewal sweep
+/// re-charges `autoRenew` subscriptions whose period has ended, or marks them
+/// `expired` (and revokes thread access) when auto-renew is off or the
+/// subscriber can no longer afford the price.
+model Subscription {
+  id            String   @id @default(cuid())
+  planId        String
+  subscriberId  String
+  status        String   @default("active") // "active" | "expired"
+  autoRenew     Boolean  @default(true)
+  expiresAt     DateTime
+  lastChargedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, subscriberId])
+  @@index([status, expiresAt])
+  @@index([subscriberId])
+}
+
 /// A tip transaction recorded during a toy-control tip session.
 model TipHistory {
   id         String   @id @default(cuid())
