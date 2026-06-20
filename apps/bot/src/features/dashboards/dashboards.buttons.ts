@@ -11,7 +11,9 @@ const dashboardButtonHandler: ButtonHandler = {
   },
   async execute(interaction: ButtonInteraction): Promise<void> {
     if (!interaction.guildId) {
-      throw new UserFacingError("This button can only be used inside a server.");
+      throw new UserFacingError(
+        "This button can only be used inside a server.",
+      );
     }
 
     const action = interaction.customId.slice("dashboard:".length);
@@ -40,7 +42,8 @@ const dashboardButtonHandler: ButtonHandler = {
 
       case "connect-toy":
         await interaction.reply({
-          content: "Use `/toy-connect` to get a QR code and pair your Lovense toy.",
+          content:
+            "Use `/toy-connect` to get a QR code and pair your Lovense toy.",
           ephemeral: true,
         });
         return;
@@ -86,7 +89,10 @@ const dashboardButtonHandler: ButtonHandler = {
       }
 
       default:
-        await interaction.reply({ content: "Unknown dashboard action.", ephemeral: true });
+        await interaction.reply({
+          content: "Unknown dashboard action.",
+          ephemeral: true,
+        });
     }
   },
 };

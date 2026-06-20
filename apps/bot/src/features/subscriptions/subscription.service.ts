@@ -198,11 +198,18 @@ export async function subscribe(
     // for a fanclub they couldn't be added to. If the add fails (e.g. the bot
     // lacks permission on the private thread) we abort without charging.
     const thread = await fetchThreadOrThrow(client, plan.threadId);
-    // Record prior membership so a later rollback only revokes access we can
-    // *prove* we granted. "unknown" (e.g. GuildMembers intent off) is treated
-    // conservatively below — we never revoke on it, to avoid kicking a
-    // pre-existing/manual member.
+    // Record prior membership so a later rollback only revokes access we
+    // actually granted. We must know this *before* adding: if it's
+    // indeterminate we can neither safely roll back (might kick a pre-existing
+    // member) nor safely keep it (might strand a non-member with no row), so we
+    // abort before granting access or charging. With the GuildMembers intent
+    // enabled this is a rare transient failure, not the steady state.
     const priorMembership = await getThreadMembership(thread, subscriberId);
+    if (priorMembership === "unknown") {
+      throw new UserFacingError(
+        "Couldn't verify your fanclub access right now — please try again in a moment. You were not charged.",
+      );
+    }
     const added = await addToThread(thread, subscriberId);
     if (!added) {
       throw new UserFacingError(

@@ -17,7 +17,9 @@ const toySessionCommand: SlashCommand = {
     .addStringOption((option) =>
       option
         .setName("mode")
-        .setDescription("gangbang = you get controlled by everyone | orgy = others can join too")
+        .setDescription(
+          "gangbang = you get controlled by everyone | orgy = others can join too",
+        )
         .setRequired(true)
         .addChoices(
           { name: "gangbang (you get controlled)", value: "gangbang" },

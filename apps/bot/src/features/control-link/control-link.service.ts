@@ -17,12 +17,25 @@ const LINK_PATTERNS: Array<{
 }> = [
   // Lovense Standard API remote-control links (/t2/) and partner-control links (/c/)
   // Match any subdomain of lovense-api.com to cover both api. and c. variants
-  { pattern: /https?:\/\/[a-z0-9-]+\.lovense-api\.com\/t2\/[^\s]+/i, provider: "lovense" },
-  { pattern: /https?:\/\/(?:c\.)?lovense\.com\/c\/[^\s]+/i, provider: "lovense" },
+  {
+    pattern: /https?:\/\/[a-z0-9-]+\.lovense-api\.com\/t2\/[^\s]+/i,
+    provider: "lovense",
+  },
+  {
+    pattern: /https?:\/\/(?:c\.)?lovense\.com\/c\/[^\s]+/i,
+    provider: "lovense",
+  },
   // Handyfeeling session/connect links and legacy /remote?<code> format
-  { pattern: /https?:\/\/handyfeeling\.com\/(?:(?:sessions?|connect)\/[^\s]+|remote\?[^\s]+)/i, provider: "handyfeeling" },
+  {
+    pattern:
+      /https?:\/\/handyfeeling\.com\/(?:(?:sessions?|connect)\/[^\s]+|remote\?[^\s]+)/i,
+    provider: "handyfeeling",
+  },
   // xtoys room/toy sharing links and legacy /session/<code> format
-  { pattern: /https?:\/\/xtoys\.app\/(?:r|rooms?|toys?|sessions?)\/[^\s]+/i, provider: "xtoys" },
+  {
+    pattern: /https?:\/\/xtoys\.app\/(?:r|rooms?|toys?|sessions?)\/[^\s]+/i,
+    provider: "xtoys",
+  },
 ];
 
 /**
@@ -68,7 +81,10 @@ export async function getRaffle(
     select: { hostId: true, _count: { select: { participants: true } } },
   });
   if (!raffle) return null;
-  return { hostId: raffle.hostId, participantCount: raffle._count.participants };
+  return {
+    hostId: raffle.hostId,
+    participantCount: raffle._count.participants,
+  };
 }
 
 /**
@@ -93,7 +109,9 @@ export async function joinRaffle(
 
     let joined = false;
     try {
-      await tx.raffleParticipant.create({ data: { raffleId: raffle.id, userId } });
+      await tx.raffleParticipant.create({
+        data: { raffleId: raffle.id, userId },
+      });
       joined = true;
     } catch {
       // unique constraint — user already entered
@@ -122,7 +140,9 @@ export async function joinRaffle(
 export async function pickWinner(
   raffleMessageId: string,
   hostId: string,
-): Promise<{ winnerId: string; link: ParsedControlLink } | "not-host" | "empty" | null> {
+): Promise<
+  { winnerId: string; link: ParsedControlLink } | "not-host" | "empty" | null
+> {
   return prisma.$transaction(async (tx) => {
     const raffle = await tx.raffle.findUnique({
       where: { messageId: raffleMessageId, active: true },
@@ -142,10 +162,14 @@ export async function pickWinner(
     await tx.raffle.delete({ where: { id: raffle.id } });
 
     const participants = raffle.participants.map((p) => p.userId);
-    const winnerId = participants[Math.floor(Math.random() * participants.length)]!;
+    const winnerId =
+      participants[Math.floor(Math.random() * participants.length)]!;
     return {
       winnerId,
-      link: { url: raffle.linkUrl, provider: raffle.linkProvider as ParsedControlLink["provider"] },
+      link: {
+        url: raffle.linkUrl,
+        provider: raffle.linkProvider as ParsedControlLink["provider"],
+      },
     };
   });
 }
@@ -189,7 +213,10 @@ export async function postRaffleEmbed(
   );
 
   let raffleMsg: Message;
-  raffleMsg = await channel.send({ embeds: [embed], components: [placeholderRow] });
+  raffleMsg = await channel.send({
+    embeds: [embed],
+    components: [placeholderRow],
+  });
 
   await createRaffle(raffleMsg.id, channelId, guildId, link, authorId);
 

@@ -10,7 +10,9 @@ import { executeTip } from "./tipping.service.js";
 const tipCommand: SlashCommand = {
   data: new SlashCommandBuilder()
     .setName("tip")
-    .setDescription("Tip tokens to the active toy control session in this channel")
+    .setDescription(
+      "Tip tokens to the active toy control session in this channel",
+    )
     .addIntegerOption((option) =>
       option
         .setName("amount")
@@ -30,9 +32,10 @@ const tipCommand: SlashCommand = {
     const amount = interaction.options.getInteger("amount", true);
     const rawMessage = interaction.options.getString("message") ?? undefined;
     // Cap before committing so the public announcement never exceeds Discord's limit.
-    const tipMessage = rawMessage && rawMessage.length > 200
-      ? `${rawMessage.slice(0, 197)}...`
-      : rawMessage;
+    const tipMessage =
+      rawMessage && rawMessage.length > 200
+        ? `${rawMessage.slice(0, 197)}...`
+        : rawMessage;
 
     // Defer ephemerally so any error (e.g. insufficient balance) stays private.
     await interaction.deferReply({ ephemeral: true });

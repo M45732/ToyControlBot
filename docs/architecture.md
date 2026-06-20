@@ -83,12 +83,14 @@ Contains Discord command registration and command entry points.
 Command handlers should be thin.
 
 They should:
+
 - validate command input
 - check basic interaction context
 - call feature services
 - reply to the user
 
 They should not:
+
 - contain large business logic
 - directly manipulate complex database models
 - duplicate permission logic
@@ -99,6 +101,7 @@ They should not:
 Contains Discord event handlers.
 
 Examples:
+
 - ready event
 - interactionCreate event
 - guildCreate event
@@ -124,6 +127,7 @@ features/
 ```
 
 A feature folder may contain:
+
 - command logic
 - service logic
 - types
@@ -136,6 +140,7 @@ A feature folder may contain:
 Contains cross-feature services.
 
 Examples:
+
 - role service
 - logging service
 - guild settings service
@@ -150,6 +155,7 @@ If something is used by several features, it belongs in `services/`.
 Contains low-level helpers.
 
 Examples:
+
 - logger setup
 - environment helpers
 - error helpers
@@ -190,7 +196,9 @@ Command handlers should be small.
 Example:
 
 ```ts
-export async function handleExampleCommand(interaction: ChatInputCommandInteraction) {
+export async function handleExampleCommand(
+  interaction: ChatInputCommandInteraction,
+) {
   await interaction.deferReply({ ephemeral: true });
 
   const result = await exampleService.run({
@@ -209,7 +217,9 @@ Services should contain the actual business logic.
 Example:
 
 ```ts
-export async function runExampleService(input: ExampleInput): Promise<ExampleResult> {
+export async function runExampleService(
+  input: ExampleInput,
+): Promise<ExampleResult> {
   // Validate
   // Load data
   // Apply business rules
@@ -267,6 +277,7 @@ Do not expose internal stack traces to Discord users.
 Permission checks should be explicit.
 
 Always consider:
+
 - Is this command guild-only?
 - Can it be used in DMs?
 - Does the user need a role?
@@ -280,6 +291,7 @@ Always consider:
 Use structured logging where possible.
 
 Log:
+
 - startup
 - command errors
 - failed permission operations
@@ -287,6 +299,7 @@ Log:
 - important admin actions
 
 Avoid logging:
+
 - tokens
 - secrets
 - unnecessary personal data
@@ -301,6 +314,7 @@ legacy/old-bot-readonly/
 ```
 
 Rules:
+
 - do not edit it
 - do not import from it
 - do not depend on it at runtime

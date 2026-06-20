@@ -10,14 +10,19 @@ const joinRaffleHandler: ButtonHandler = {
   },
   async execute(interaction: ButtonInteraction): Promise<void> {
     if (!interaction.guildId) {
-      throw new UserFacingError("This button can only be used inside a server.");
+      throw new UserFacingError(
+        "This button can only be used inside a server.",
+      );
     }
 
     const raffleMessageId = interaction.customId.slice("raffle:join:".length);
     const result = await joinRaffle(raffleMessageId, interaction.user.id);
 
     if (!result) {
-      await interaction.reply({ content: "This raffle has already ended.", ephemeral: true });
+      await interaction.reply({
+        content: "This raffle has already ended.",
+        ephemeral: true,
+      });
       return;
     }
 
@@ -36,7 +41,9 @@ const endRaffleHandler: ButtonHandler = {
   },
   async execute(interaction: ButtonInteraction): Promise<void> {
     if (!interaction.guildId) {
-      throw new UserFacingError("This button can only be used inside a server.");
+      throw new UserFacingError(
+        "This button can only be used inside a server.",
+      );
     }
 
     const raffleMessageId = interaction.customId.slice("raffle:end:".length);
@@ -50,7 +57,10 @@ const endRaffleHandler: ButtonHandler = {
     }
     if (result === "empty") {
       // Raffle stays active — reply privately so the public embed is untouched.
-      await interaction.reply({ content: "No one has entered yet. The raffle is still open.", ephemeral: true });
+      await interaction.reply({
+        content: "No one has entered yet. The raffle is still open.",
+        ephemeral: true,
+      });
       return;
     }
 
@@ -77,4 +87,7 @@ const endRaffleHandler: ButtonHandler = {
   },
 };
 
-export const controlLinkButtons: ButtonHandler[] = [joinRaffleHandler, endRaffleHandler];
+export const controlLinkButtons: ButtonHandler[] = [
+  joinRaffleHandler,
+  endRaffleHandler,
+];

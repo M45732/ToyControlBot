@@ -60,7 +60,9 @@ function buildSessionEmbed(
     .setTimestamp();
 
   const usersText =
-    userIds.length > 0 ? userIds.map((id) => `<@${id}>`).join(", ") : `<@${ownerId}>`;
+    userIds.length > 0
+      ? userIds.map((id) => `<@${id}>`).join(", ")
+      : `<@${ownerId}>`;
 
   embed.addFields(
     { name: "Controlled", value: usersText, inline: true },
@@ -167,14 +169,19 @@ export async function startSession(
     // Use buildSessionRow for all modes so adding a button there applies
     // everywhere. For orgy the join button needs the real message ID, so we
     // pass an empty string here and re-edit immediately after send.
-    const sessionMsg = await channel.send({ embeds: [embed], components: [buildSessionRow(mode, "")] });
+    const sessionMsg = await channel.send({
+      embeds: [embed],
+      components: [buildSessionRow(mode, "")],
+    });
 
     // Update buttons now that we have the real message ID (join button needs it).
     // If the edit fails the message is already visible but un-joinable; delete it
     // so the channel isn't left with a broken session embed.
     if (mode === "orgy") {
       try {
-        await sessionMsg.edit({ components: [buildSessionRow(mode, sessionMsg.id)] });
+        await sessionMsg.edit({
+          components: [buildSessionRow(mode, sessionMsg.id)],
+        });
       } catch (err) {
         await sessionMsg.delete().catch(() => undefined);
         throw err;
@@ -199,7 +206,9 @@ export async function startSession(
     for (const emoji of VOTE_EMOJIS) {
       await sessionMsg
         .react(emoji)
-        .catch((err: unknown) => log.warn({ err, emoji }, "Failed to add vote reaction"));
+        .catch((err: unknown) =>
+          log.warn({ err, emoji }, "Failed to add vote reaction"),
+        );
     }
   } finally {
     pendingChannels.delete(channelId);
@@ -299,12 +308,14 @@ async function runVoteTick(
     const userIds = freshState.participants.map((p) => p.userId);
 
     for (const uid of userIds) {
-      await sendVibrate(uid, levelToVibration(votedLevel)).catch((err: unknown) =>
-        log.warn({ err, uid }, "Vibrate command failed"),
+      await sendVibrate(uid, levelToVibration(votedLevel)).catch(
+        (err: unknown) => log.warn({ err, uid }, "Vibrate command failed"),
       );
     }
 
-    const voteBreakdown = votes.map((v) => `${v.emoji} \`${v.count}\``).join(" | ");
+    const voteBreakdown = votes
+      .map((v) => `${v.emoji} \`${v.count}\``)
+      .join(" | ");
     const updatedEmbed = buildSessionEmbed(
       session.sessionMode as SessionMode,
       session.ownerId,
@@ -322,10 +333,14 @@ async function runVoteTick(
     if (tick % VOTE_RESET_TICKS === 0) {
       // removeAll requires MANAGE_MESSAGES; if it fails, skip re-adding reactions
       // (pointless without a clean slate) and surface the warning so admins can fix permissions.
-      const cleared = await message.reactions.removeAll()
+      const cleared = await message.reactions
+        .removeAll()
         .then(() => true)
         .catch((err: unknown) => {
-          log.warn({ err, messageId }, "Reaction reset failed — bot may lack MANAGE_MESSAGES; stale votes will persist");
+          log.warn(
+            { err, messageId },
+            "Reaction reset failed — bot may lack MANAGE_MESSAGES; stale votes will persist",
+          );
           return false;
         });
       if (cleared) {
@@ -366,7 +381,10 @@ export async function endSession(messageId: string): Promise<void> {
     await Promise.all(
       session.participants.map(({ userId }) =>
         sendVibrate(userId, 0).catch((err: unknown) =>
-          log.warn({ err, userId }, "Failed to send stop vibration on session end"),
+          log.warn(
+            { err, userId },
+            "Failed to send stop vibration on session end",
+          ),
         ),
       ),
     );
@@ -388,7 +406,10 @@ function stopVoteLoop(messageId: string): void {
  * Returns false if the session is inactive, the user is already in this session,
  * or the user is already participating in another active session.
  */
-export async function joinSession(messageId: string, userId: string): Promise<boolean> {
+export async function joinSession(
+  messageId: string,
+  userId: string,
+): Promise<boolean> {
   const session = await prisma.toyControl.findUnique({
     where: { messageId },
     select: { id: true, active: true },
@@ -405,7 +426,9 @@ export async function joinSession(messageId: string, userId: string): Promise<bo
 
   pendingUsers.add(userId);
   try {
-    await prisma.toyControlUser.create({ data: { sessionId: session.id, userId } });
+    await prisma.toyControlUser.create({
+      data: { sessionId: session.id, userId },
+    });
     return true;
   } catch {
     return false; // unique constraint = already joined this session
@@ -446,7 +469,10 @@ export async function leaveSession(
   });
 
   await sendVibrate(userId, 0).catch((err: unknown) =>
-    log.warn({ err, userId }, "Failed to stop vibration for leaving participant"),
+    log.warn(
+      { err, userId },
+      "Failed to stop vibration for leaving participant",
+    ),
   );
   return "left";
 }
@@ -456,17 +482,23 @@ export async function leaveSession(
  * Orphaned sessions (message deleted) are cleaned up automatically.
  */
 export async function restoreActiveSessions(client: Client): Promise<void> {
-  const sessions = await prisma.toyControl.findMany({ where: { active: true } });
+  const sessions = await prisma.toyControl.findMany({
+    where: { active: true },
+  });
   log.info({ count: sessions.length }, "Restoring active sessions");
 
   for (const session of sessions) {
-    const channel = await client.channels.fetch(session.channelId).catch(() => null);
+    const channel = await client.channels
+      .fetch(session.channelId)
+      .catch(() => null);
     if (!(channel instanceof TextChannel)) {
       await endSession(session.messageId);
       continue;
     }
 
-    const message = await channel.messages.fetch(session.messageId).catch(() => null);
+    const message = await channel.messages
+      .fetch(session.messageId)
+      .catch(() => null);
     if (!message) {
       await endSession(session.messageId);
       continue;

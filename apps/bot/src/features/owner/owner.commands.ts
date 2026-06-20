@@ -28,7 +28,10 @@ const versionCommand: SlashCommand = {
     .setName("version")
     .setDescription("Show the bot version"),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.reply({ content: `Bot version: **${readPackageVersion()}**`, ephemeral: true });
+    await interaction.reply({
+      content: `Bot version: **${readPackageVersion()}**`,
+      ephemeral: true,
+    });
   },
 };
 
