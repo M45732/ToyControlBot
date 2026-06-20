@@ -6,7 +6,7 @@
  */
 export const SUBSCRIPTION_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type SubscriptionStatus = "active" | "expired" | "cancelled";
+export type SubscriptionStatus = "active" | "expired";
 
 export interface SubscribeResult {
   readonly planName: string;
@@ -14,7 +14,7 @@ export interface SubscribeResult {
   readonly priceTokens: number;
   readonly expiresAt: Date;
   readonly subscriberNewBalance: number;
-  /** True when this extended an existing (lapsed/cancelled) subscription rather than creating a new one. */
+  /** True when this extended an existing (lapsed) subscription rather than creating a new one. */
   readonly renewed: boolean;
 }
 

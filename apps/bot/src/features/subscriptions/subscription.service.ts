@@ -182,15 +182,25 @@ export async function subscribe(
       where: { planId_subscriberId: { planId: plan.id, subscriberId } },
     });
     if (existing && existing.status === "active" && existing.expiresAt > now) {
-      // Already paid through a future date. Use this as a repair path: if a mod
-      // removal or a failed renewal re-add dropped them from the thread, restore
-      // access (best-effort) instead of just rejecting them.
+      // Already paid through a future date. Treat /subscribe as a repair +
+      // re-enable path: running it signals intent to stay subscribed, so flip
+      // auto-renew back on if they'd previously cancelled, and restore thread
+      // access (best-effort) if a mod removal or failed re-add dropped them.
+      if (!existing.autoRenew) {
+        await prisma.subscription.update({
+          where: { id: existing.id },
+          data: { autoRenew: true },
+        });
+      }
       const resolution = await resolveThread(client, plan.threadId);
       if (resolution.state === "ok") {
         await addToThread(resolution.thread, subscriberId);
       }
+      const renewNote = existing.autoRenew
+        ? ""
+        : " Auto-renew is back on — it'll renew automatically.";
       throw new UserFacingError(
-        `You're already subscribed — your access runs until <t:${toUnix(existing.expiresAt)}:D>. If you'd lost access to the thread, it's been restored.`,
+        `You're already subscribed — your access runs until <t:${toUnix(existing.expiresAt)}:D>.${renewNote} If you'd lost access to the thread, it's been restored.`,
       );
     }
 
@@ -507,7 +517,9 @@ export async function renewDueSubscriptions(client: Client): Promise<void> {
         continue;
       }
       const outcome = await chargeRenewal(sub, now);
-      if (outcome === "insufficient") {
+      if (outcome === "insufficient" || outcome === "renew-disabled") {
+        // Can't afford it, or auto-renew was switched off after we loaded the
+        // row — either way the period is over, so lapse and revoke access.
         await lapse(client, sub);
       } else if (outcome === "charged") {
         // Ensure the paid member is actually in the thread — a moderator may
@@ -526,12 +538,18 @@ export async function renewDueSubscriptions(client: Client): Promise<void> {
 
 type SubscriptionWithPlan = Subscription & { plan: SubscriptionPlan };
 
-type RenewalOutcome = "charged" | "insufficient" | "claimed-elsewhere";
+type RenewalOutcome =
+  | "charged"
+  | "insufficient"
+  | "renew-disabled"
+  | "claimed-elsewhere";
 
 /** A concurrent processor already renewed this period; abort without charging. */
 class AlreadyClaimedError extends Error {}
 /** The subscriber can't afford the renewal; the caller should lapse. */
 class InsufficientBalanceError extends Error {}
+/** Auto-renew was turned off after the sweep loaded the row; the caller should lapse now. */
+class RenewDisabledError extends Error {}
 
 /**
  * Attempt one auto-renew charge.
@@ -570,6 +588,23 @@ async function chargeRenewal(
         data: { expiresAt: newExpiry, lastChargedAt: now },
       });
       if (claim.count === 0) {
+        // The claim required (status active, our expiry, autoRenew true). Figure
+        // out why it missed: if the row is still due (active, expiry unchanged),
+        // the only thing that changed is auto-renew being switched off mid-sweep
+        // — lapse it now rather than waiting for the next sweep. Otherwise some
+        // other processor advanced the period (expiry now in the future), so
+        // keep their access.
+        const fresh = await tx.subscription.findUnique({
+          where: { id: sub.id },
+          select: { status: true, expiresAt: true },
+        });
+        if (
+          fresh &&
+          fresh.status === "active" &&
+          fresh.expiresAt.getTime() <= now.getTime()
+        ) {
+          throw new RenewDisabledError();
+        }
         throw new AlreadyClaimedError();
       }
 
@@ -609,6 +644,9 @@ async function chargeRenewal(
     }
     if (err instanceof InsufficientBalanceError) {
       return "insufficient";
+    }
+    if (err instanceof RenewDisabledError) {
+      return "renew-disabled";
     }
     throw err;
   }

@@ -143,7 +143,7 @@ model Subscription {
   id            String   @id @default(cuid())
   planId        String
   subscriberId  String
-  status        String   @default("active") // "active" | "expired" | "cancelled"
+  status        String   @default("active") // "active" | "expired"
   autoRenew     Boolean  @default(true)
   expiresAt     DateTime
   lastChargedAt DateTime @default(now())
