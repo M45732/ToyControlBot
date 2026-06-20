@@ -17,10 +17,7 @@ export function buildPairingEmbed(qr: LovenseQrCodeData): EmbedBuilder {
           "([Android](https://play.google.com/store/apps/details?id=com.lovense.remote) / " +
           "[iOS](https://apps.apple.com/us/app/lovense-remote/id1027312824)).",
       },
-      {
-        name: "2) Connect your toy(s)",
-        value: "Connect your toy(s) in the app.",
-      },
+      { name: "2) Connect your toy(s)", value: "Connect your toy(s) in the app." },
       {
         name: "3) Scan the QR code",
         value:
@@ -33,7 +30,9 @@ export function buildPairingEmbed(qr: LovenseQrCodeData): EmbedBuilder {
 }
 
 export function buildToyStatusEmbed(status: ToyStatus): EmbedBuilder {
-  const embed = new EmbedBuilder().setTitle("Toy status").setColor(BRAND_COLOR);
+  const embed = new EmbedBuilder()
+    .setTitle("Toy status")
+    .setColor(BRAND_COLOR);
 
   switch (status.state) {
     case "connected":

@@ -29,21 +29,14 @@ export const messageCreateEvent = defineEvent({
     // mirroring the legacy bot behaviour (legacy/old-bot-readonly/events/message/messageCreate.js:90-92).
     const isInAllowedChannel =
       message.channelId === allowedChannelId ||
-      (message.channel instanceof ThreadChannel &&
-        message.channel.parentId === allowedChannelId);
+      (message.channel instanceof ThreadChannel && message.channel.parentId === allowedChannelId);
 
     if (allowedChannelId && !isInAllowedChannel) {
       let deleted = false;
-      await message
-        .delete()
-        .then(() => {
-          deleted = true;
-        })
+      await message.delete()
+        .then(() => { deleted = true; })
         .catch((err: unknown) =>
-          log.warn(
-            { err, channelId: message.channelId },
-            "Failed to delete out-of-channel control-link message",
-          ),
+          log.warn({ err, channelId: message.channelId }, "Failed to delete out-of-channel control-link message"),
         );
 
       if (!deleted) {
@@ -59,43 +52,28 @@ export const messageCreateEvent = defineEvent({
       return;
     }
 
-    if (
-      !(message.channel instanceof BaseGuildTextChannel) &&
-      !(message.channel instanceof ThreadChannel)
-    )
-      return;
+    if (!(message.channel instanceof BaseGuildTextChannel) && !(message.channel instanceof ThreadChannel)) return;
 
     // Delete the original message before posting the raffle so the URL is never
     // visible to non-winners. If we lack Manage Messages permission, abort: running
     // the raffle with the link still visible defeats the purpose.
     let deleted = false;
-    await message
-      .delete()
-      .then(() => {
-        deleted = true;
-      })
-      .catch((err: unknown) =>
-        log.warn({ err }, "Failed to delete original control-link message"),
-      );
+    await message.delete().then(() => { deleted = true; }).catch((err: unknown) =>
+      log.warn({ err }, "Failed to delete original control-link message"),
+    );
 
     if (!deleted) {
       await message.author
         .send(
           `Your control link couldn't be raffled because the bot couldn't delete your message in <#${message.channelId}>. ` +
-            "Please make sure the bot has the **Manage Messages** permission in that channel.",
+          "Please make sure the bot has the **Manage Messages** permission in that channel.",
         )
         .catch(() => undefined);
       return;
     }
 
     try {
-      await postRaffleEmbed(
-        message.channel,
-        message.author.id,
-        message.guildId,
-        message.channelId,
-        link,
-      );
+      await postRaffleEmbed(message.channel, message.author.id, message.guildId, message.channelId, link);
     } catch (err) {
       log.error({ err }, "Failed to send raffle message");
     }

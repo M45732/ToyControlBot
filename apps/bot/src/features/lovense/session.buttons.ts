@@ -11,15 +11,10 @@ const leaveHandler: ButtonHandler = {
   },
   async execute(interaction: ButtonInteraction): Promise<void> {
     if (!interaction.guildId) {
-      throw new UserFacingError(
-        "This button can only be used inside a server.",
-      );
+      throw new UserFacingError("This button can only be used inside a server.");
     }
 
-    const result = await leaveSession(
-      interaction.message.id,
-      interaction.user.id,
-    );
+    const result = await leaveSession(interaction.message.id, interaction.user.id);
 
     switch (result) {
       case "ended":
@@ -27,16 +22,10 @@ const leaveHandler: ButtonHandler = {
         await interaction.reply({ content: "Session ended.", ephemeral: true });
         break;
       case "left":
-        await interaction.reply({
-          content: "You left the session.",
-          ephemeral: true,
-        });
+        await interaction.reply({ content: "You left the session.", ephemeral: true });
         break;
       case "not-found":
-        await interaction.reply({
-          content: "No active session found.",
-          ephemeral: true,
-        });
+        await interaction.reply({ content: "No active session found.", ephemeral: true });
         break;
     }
   },
@@ -48,9 +37,7 @@ const joinHandler: ButtonHandler = {
   },
   async execute(interaction: ButtonInteraction): Promise<void> {
     if (!interaction.guildId) {
-      throw new UserFacingError(
-        "This button can only be used inside a server.",
-      );
+      throw new UserFacingError("This button can only be used inside a server.");
     }
 
     const messageId = interaction.customId.slice("session:join:".length);
@@ -74,9 +61,7 @@ const joinHandler: ButtonHandler = {
 
     const joined = await joinSession(messageId, interaction.user.id);
     if (!joined) {
-      await interaction.editReply(
-        "You're already in this session or it has ended.",
-      );
+      await interaction.editReply("You're already in this session or it has ended.");
       return;
     }
 

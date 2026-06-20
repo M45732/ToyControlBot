@@ -18,14 +18,9 @@ const log = createLogger("messageUpdate");
 
 export const messageUpdateEvent = defineEvent({
   name: Events.MessageUpdate,
-  async execute(
-    _old: Message | PartialMessage,
-    newMessage: Message | PartialMessage,
-  ): Promise<void> {
+  async execute(_old: Message | PartialMessage, newMessage: Message | PartialMessage): Promise<void> {
     // Fetch the full message if partial so we can read content.
-    const message = newMessage.partial
-      ? await newMessage.fetch().catch(() => null)
-      : newMessage;
+    const message = newMessage.partial ? await newMessage.fetch().catch(() => null) : newMessage;
     if (!message) return;
     // Guard author early — before any delete or send — so we never post an
     // unreachable raffle embed if author is absent on a fetched message.
@@ -38,21 +33,14 @@ export const messageUpdateEvent = defineEvent({
 
     const isInAllowedChannel =
       message.channelId === allowedChannelId ||
-      (message.channel instanceof ThreadChannel &&
-        message.channel.parentId === allowedChannelId);
+      (message.channel instanceof ThreadChannel && message.channel.parentId === allowedChannelId);
 
     if (allowedChannelId && !isInAllowedChannel) {
       let deleted = false;
-      await message
-        .delete()
-        .then(() => {
-          deleted = true;
-        })
+      await message.delete()
+        .then(() => { deleted = true; })
         .catch((err: unknown) =>
-          log.warn(
-            { err, channelId: message.channelId },
-            "Failed to delete edited control-link message",
-          ),
+          log.warn({ err, channelId: message.channelId }, "Failed to delete edited control-link message"),
         );
 
       if (!deleted) return;
@@ -65,43 +53,25 @@ export const messageUpdateEvent = defineEvent({
       return;
     }
 
-    if (
-      !(message.channel instanceof BaseGuildTextChannel) &&
-      !(message.channel instanceof ThreadChannel)
-    )
-      return;
+    if (!(message.channel instanceof BaseGuildTextChannel) && !(message.channel instanceof ThreadChannel)) return;
 
     let deleted = false;
-    await message
-      .delete()
-      .then(() => {
-        deleted = true;
-      })
-      .catch((err: unknown) =>
-        log.warn(
-          { err },
-          "Failed to delete edited control-link message for raffle",
-        ),
-      );
+    await message.delete().then(() => { deleted = true; }).catch((err: unknown) =>
+      log.warn({ err }, "Failed to delete edited control-link message for raffle"),
+    );
 
     if (!deleted) {
       await message.author
         .send(
           `Your edited message couldn't be raffled because the bot couldn't delete it in <#${message.channelId}>. ` +
-            "Please make sure the bot has the **Manage Messages** permission in that channel.",
+          "Please make sure the bot has the **Manage Messages** permission in that channel.",
         )
         .catch(() => undefined);
       return;
     }
 
     try {
-      await postRaffleEmbed(
-        message.channel,
-        message.author.id,
-        message.guildId,
-        message.channelId,
-        link,
-      );
+      await postRaffleEmbed(message.channel, message.author.id, message.guildId, message.channelId, link);
     } catch (err) {
       log.error({ err }, "Failed to send raffle message for edited message");
     }

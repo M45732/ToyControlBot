@@ -15,10 +15,7 @@ const blockMemberCommand: SlashCommand = {
     .setDescription("Block a member from viewing the current channel")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addUserOption((option) =>
-      option
-        .setName("member")
-        .setDescription("The member to block")
-        .setRequired(true),
+      option.setName("member").setDescription("The member to block").setRequired(true),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await requireGuildMember(interaction);
@@ -30,16 +27,14 @@ const blockMemberCommand: SlashCommand = {
       throw new UserFacingError("Cannot manage permissions for this channel.");
     }
 
-    const targetMember = await interaction
-      .guild!.members.fetch(targetUser.id)
+    const targetMember = await interaction.guild!.members
+      .fetch(targetUser.id)
       .catch(() => null);
     if (!targetMember) {
       throw new UserFacingError("Member not found.");
     }
 
-    await channel.permissionOverwrites.edit(targetMember, {
-      ViewChannel: false,
-    });
+    await channel.permissionOverwrites.edit(targetMember, { ViewChannel: false });
 
     await interaction.reply({
       content: `<@${targetUser.id}> has been blocked from this channel.`,
@@ -54,10 +49,7 @@ const invitePerformerCommand: SlashCommand = {
     .setDescription("Invite a performer to access the current channel")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addUserOption((option) =>
-      option
-        .setName("member")
-        .setDescription("The performer to invite")
-        .setRequired(true),
+      option.setName("member").setDescription("The performer to invite").setRequired(true),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await requireGuildMember(interaction);
@@ -69,8 +61,8 @@ const invitePerformerCommand: SlashCommand = {
       throw new UserFacingError("Cannot manage permissions for this channel.");
     }
 
-    const targetMember = await interaction
-      .guild!.members.fetch(targetUser.id)
+    const targetMember = await interaction.guild!.members
+      .fetch(targetUser.id)
       .catch(() => null);
     if (!targetMember) {
       throw new UserFacingError("Member not found.");
@@ -94,10 +86,7 @@ const removePerformerCommand: SlashCommand = {
     .setDescription("Remove a performer's access from the current channel")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addUserOption((option) =>
-      option
-        .setName("member")
-        .setDescription("The performer to remove")
-        .setRequired(true),
+      option.setName("member").setDescription("The performer to remove").setRequired(true),
     ),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     await requireGuildMember(interaction);

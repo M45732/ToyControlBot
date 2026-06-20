@@ -11,10 +11,7 @@ const pingCommand: SlashCommand = {
     .setName("ping")
     .setDescription("Check bot latency"),
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
-    const sent = await interaction.reply({
-      content: "Pinging...",
-      fetchReply: true,
-    });
+    const sent = await interaction.reply({ content: "Pinging...", fetchReply: true });
     const roundtrip = sent.createdTimestamp - interaction.createdTimestamp;
     const wsLatency = interaction.client.ws.ping;
     await interaction.editReply(
@@ -33,9 +30,7 @@ const helpCommand: SlashCommand = {
     const embed = new EmbedBuilder()
       .setTitle("Available Commands")
       .setColor(0x5865f2)
-      .setDescription(
-        commands.map((cmd) => `**/${cmd.data.name}**`).join("\n"),
-      );
+      .setDescription(commands.map((cmd) => `**/${cmd.data.name}**`).join("\n"));
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
   },

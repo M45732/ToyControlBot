@@ -27,10 +27,7 @@ const setupMemberDashboardCommand: SlashCommand = {
       .setColor(0x5865f2)
       .addFields(
         { name: "Daily Tokens", value: "Claim free tokens every 24 hours." },
-        {
-          name: "Balance",
-          value: "View your current token balance or history.",
-        },
+        { name: "Balance", value: "View your current token balance or history." },
         { name: "Leaderboard", value: "See who holds the most tokens." },
       );
 
@@ -50,15 +47,10 @@ const setupMemberDashboardCommand: SlashCommand = {
     );
 
     if (!(interaction.channel instanceof BaseGuildTextChannel)) {
-      throw new UserFacingError(
-        "This command can only be used in a text channel.",
-      );
+      throw new UserFacingError("This command can only be used in a text channel.");
     }
     await interaction.channel.send({ embeds: [embed], components: [row] });
-    await interaction.reply({
-      content: "Member dashboard posted.",
-      ephemeral: true,
-    });
+    await interaction.reply({ content: "Member dashboard posted.", ephemeral: true });
   },
 };
 
@@ -77,18 +69,11 @@ const setupPerformerDashboardCommand: SlashCommand = {
       .addFields(
         {
           name: "Toy Session",
-          value:
-            "Start a gangbang (you get controlled) or orgy (group) session.",
+          value: "Start a gangbang (you get controlled) or orgy (group) session.",
         },
-        {
-          name: "Tipping",
-          value: "Members can tip you with `/tip` during an active session.",
-        },
+        { name: "Tipping", value: "Members can tip you with `/tip` during an active session." },
         { name: "Connect Toy", value: "Pair your Lovense toy via QR code." },
-        {
-          name: "Subscriptions",
-          value: "Run a paid fanclub with `/subscription-setup`.",
-        },
+        { name: "Subscriptions", value: "Run a paid fanclub with `/subscription-setup`." },
       );
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -111,15 +96,10 @@ const setupPerformerDashboardCommand: SlashCommand = {
     );
 
     if (!(interaction.channel instanceof BaseGuildTextChannel)) {
-      throw new UserFacingError(
-        "This command can only be used in a text channel.",
-      );
+      throw new UserFacingError("This command can only be used in a text channel.");
     }
     await interaction.channel.send({ embeds: [embed], components: [row] });
-    await interaction.reply({
-      content: "Performer dashboard posted.",
-      ephemeral: true,
-    });
+    await interaction.reply({ content: "Performer dashboard posted.", ephemeral: true });
   },
 };
 
@@ -148,15 +128,10 @@ const setupToyControlDashboardCommand: SlashCommand = {
     );
 
     if (!(interaction.channel instanceof BaseGuildTextChannel)) {
-      throw new UserFacingError(
-        "This command can only be used in a text channel.",
-      );
+      throw new UserFacingError("This command can only be used in a text channel.");
     }
     await interaction.channel.send({ embeds: [embed], components: [row] });
-    await interaction.reply({
-      content: "Toy-control dashboard posted.",
-      ephemeral: true,
-    });
+    await interaction.reply({ content: "Toy-control dashboard posted.", ephemeral: true });
   },
 };
 

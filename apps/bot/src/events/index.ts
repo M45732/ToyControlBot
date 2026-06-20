@@ -14,12 +14,7 @@ const log = createLogger("events");
  *
  * Add new handlers here as features are migrated.
  */
-const events: BotEvent[] = [
-  readyEvent,
-  interactionCreateEvent,
-  messageCreateEvent,
-  messageUpdateEvent,
-];
+const events: BotEvent[] = [readyEvent, interactionCreateEvent, messageCreateEvent, messageUpdateEvent];
 
 /**
  * Wire all registered event handlers onto the Discord client.

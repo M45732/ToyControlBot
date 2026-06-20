@@ -49,9 +49,7 @@ export async function executeTip(
       .filter((id) => id !== senderId);
 
     if (receiverIds.length === 0) {
-      throw new UserFacingError(
-        "You cannot tip a session you are participating in.",
-      );
+      throw new UserFacingError("You cannot tip a session you are participating in.");
     }
 
     // Validate before any writes so the transaction never deducts tokens
@@ -86,13 +84,7 @@ export async function executeTip(
 
     // Record the sender debit in history
     await tx.tokenHistory.create({
-      data: {
-        guildId,
-        userId: senderId,
-        amount: -amount,
-        eventType: "tip_send",
-        eventId: session.messageId,
-      },
+      data: { guildId, userId: senderId, amount: -amount, eventType: "tip_send", eventId: session.messageId },
     });
 
     // Distribute tokens to receivers — give the remainder to the first participant
@@ -110,13 +102,7 @@ export async function executeTip(
         create: { guildId, userId: receiverId, balance: credit },
       });
       await tx.tokenHistory.create({
-        data: {
-          guildId,
-          userId: receiverId,
-          amount: credit,
-          eventType: "tip_received",
-          eventId: session.messageId,
-        },
+        data: { guildId, userId: receiverId, amount: credit, eventType: "tip_received", eventId: session.messageId },
       });
       await tx.tipHistory.create({
         data: {
@@ -133,20 +119,15 @@ export async function executeTip(
     const row = await tx.tokenBalance.findUnique({
       where: { guildId_userId: { guildId, userId: senderId } },
     });
-    return {
-      amount,
-      senderId,
-      receiverIds,
-      senderNewBalance: row?.balance ?? 0,
-    };
+    return { amount, senderId, receiverIds, senderNewBalance: row?.balance ?? 0 };
   });
 
   // Use a timed Lovense command so the tip burst auto-stops after the window
   // without a separate setTimeout that could fire after a newer session command.
   const tipDurationSec = Math.round(TIP_VIBRATION_DURATION_MS / 1000);
   for (const uid of result.receiverIds) {
-    sendVibrate(uid, TIP_VIBRATION_LEVEL, tipDurationSec).catch(
-      (err: unknown) => log.warn({ err, uid }, "Tip vibrate failed"),
+    sendVibrate(uid, TIP_VIBRATION_LEVEL, tipDurationSec).catch((err: unknown) =>
+      log.warn({ err, uid }, "Tip vibrate failed"),
     );
   }
 
