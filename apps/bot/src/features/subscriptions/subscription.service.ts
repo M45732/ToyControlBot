@@ -8,8 +8,9 @@ import { createLogger } from "../../lib/logger.js";
 import {
   addToThread,
   fetchThreadOrThrow,
-  isThreadReachable,
+  isThreadMember,
   removeFromThread,
+  resolveThread,
 } from "./subscription.threads.js";
 import {
   SUBSCRIPTION_PERIOD_MS,
@@ -169,6 +170,9 @@ export async function subscribe(
     // for a fanclub they couldn't be added to. If the add fails (e.g. the bot
     // lacks permission on the private thread) we abort without charging.
     const thread = await fetchThreadOrThrow(client, plan.threadId);
+    // Note whether they were already a member so a later rollback only revokes
+    // access we actually granted (not a manual invite or stale membership).
+    const wasAlreadyMember = await isThreadMember(thread, subscriberId);
     const added = await addToThread(thread, subscriberId);
     if (!added) {
       throw new UserFacingError(
@@ -315,8 +319,11 @@ export async function subscribe(
         throw err;
       }
       // Any other failure (insufficient balance, plan moved, unexpected) means
-      // they have no live access, so revoke the thread membership we granted.
-      await removeFromThread(client, plan.threadId, subscriberId);
+      // they have no live access, so revoke the thread membership — but only if
+      // we were the ones who added them, never a pre-existing/manual membership.
+      if (!wasAlreadyMember) {
+        await removeFromThread(client, plan.threadId, subscriberId);
+      }
       throw err;
     }
 
@@ -449,18 +456,26 @@ export async function renewDueSubscriptions(client: Client): Promise<void> {
         await lapse(client, sub);
         continue;
       }
-      // Don't bill for a fanclub we can no longer deliver: if the thread was
-      // deleted or the bot lost access, lapse without charging (mirrors the
-      // up-front check on the subscribe path).
-      if (!(await isThreadReachable(client, sub.plan.threadId))) {
+      // Resolve the fanclub thread, distinguishing a deleted thread (lapse) from
+      // a transient outage (skip and retry next sweep — never charge or lapse on
+      // a blip).
+      const resolution = await resolveThread(client, sub.plan.threadId);
+      if (resolution.state === "gone") {
         await lapse(client, sub);
+        continue;
+      }
+      if (resolution.state === "unreachable") {
         continue;
       }
       const outcome = await chargeRenewal(sub, now);
       if (outcome === "insufficient") {
         await lapse(client, sub);
+      } else if (outcome === "charged") {
+        // Ensure the paid member is actually in the thread — a moderator may
+        // have removed them during the previous period. Idempotent re-add.
+        await addToThread(resolution.thread, sub.subscriberId);
       }
-      // "charged" or "claimed-elsewhere": nothing more to do.
+      // "claimed-elsewhere": another processor handled it; nothing to do.
     } catch (err) {
       log.error(
         { err, subscriptionId: sub.id },
@@ -553,26 +568,37 @@ async function chargeRenewal(
 }
 
 async function lapse(client: Client, sub: SubscriptionWithPlan): Promise<void> {
-  // Revoke thread access first. Only finalize the subscription as expired once
-  // the member is actually out — otherwise we'd stop selecting it (sweeps only
-  // look at "active" rows) and leave them with paid-tier access for free. If
-  // removal fails we leave the row active+due so the next sweep retries.
+  // Conditionally claim the lapse against the exact stale row we selected. If a
+  // renewal or /subscribe advanced (status, expiresAt) since, this matches zero
+  // rows and we leave the freshly-paid subscription untouched — no wrongful
+  // expire, no thread removal.
+  const claimed = await prisma.subscription.updateMany({
+    where: { id: sub.id, status: "active", expiresAt: sub.expiresAt },
+    data: { status: "expired" },
+  });
+  if (claimed.count === 0) {
+    return;
+  }
+
   const removed = await removeFromThread(
     client,
     sub.plan.threadId,
     sub.subscriberId,
   );
   if (!removed) {
+    // Couldn't revoke access (transient). Revert to active+due so the next sweep
+    // retries — but only if a /subscribe didn't renew it in the meantime (its
+    // claim would have set a future expiresAt, which this condition won't match).
+    await prisma.subscription.updateMany({
+      where: { id: sub.id, status: "expired", expiresAt: sub.expiresAt },
+      data: { status: "active" },
+    });
     log.warn(
       { subscriptionId: sub.id },
-      "Deferring lapse — thread removal failed; will retry next sweep",
+      "Deferring lapse — thread removal failed; reverted to retry next sweep",
     );
     return;
   }
-  await prisma.subscription.update({
-    where: { id: sub.id },
-    data: { status: "expired" },
-  });
   log.info({ subscriptionId: sub.id }, "Subscription lapsed");
 }
 
