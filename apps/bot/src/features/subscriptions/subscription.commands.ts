@@ -169,10 +169,12 @@ const setupCommand: SlashCommand = {
     }
 
     // Only the thread's owner (or a moderator) may put a paywall on it.
+    // Resolve Manage Threads against *this thread* (channel overwrites), not
+    // just guild-level permissions, so a role denied here can't gate it.
     const isOwner = thread.ownerId === interaction.user.id;
-    const isModerator = member.permissions.has(
-      PermissionFlagsBits.ManageThreads,
-    );
+    const isModerator =
+      thread.permissionsFor(member)?.has(PermissionFlagsBits.ManageThreads) ??
+      false;
     if (!isOwner && !isModerator) {
       throw new UserFacingError(
         "You can only set up a subscription on a thread you created.",

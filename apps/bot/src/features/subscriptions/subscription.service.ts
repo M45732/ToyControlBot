@@ -91,13 +91,12 @@ export async function upsertPlan(
   // count is re-checked after the write, so a subscription created concurrently
   // with the move is caught (the move aborts) instead of stranding the member.
   await prisma.$transaction(async (tx) => {
+    // Count *all* non-lapsed subscriptions, including ones whose period has
+    // ended but the hourly sweep hasn't lapsed yet — those members may still be
+    // in the old thread, so a move would strand them too.
     const countActive = (): Promise<number> =>
       tx.subscription.count({
-        where: {
-          planId: existing!.id,
-          status: "active",
-          expiresAt: { gt: new Date() },
-        },
+        where: { planId: existing!.id, status: "active" },
       });
 
     if (movingThread && (await countActive()) > 0) {
@@ -540,8 +539,16 @@ async function chargeRenewal(
       // Claim the period: only the processor that still sees the expiry we read
       // wins. This also rolls back (reverting the expiry) if the debit below
       // fails, so an insufficient balance never leaves a half-renewed row.
+      // `autoRenew: true` is part of the claim so a /subscription-cancel that
+      // lands after the sweep loaded this row still wins — we won't charge a
+      // subscription that was cancelled in the meantime.
       const claim = await tx.subscription.updateMany({
-        where: { id: sub.id, status: "active", expiresAt: sub.expiresAt },
+        where: {
+          id: sub.id,
+          status: "active",
+          expiresAt: sub.expiresAt,
+          autoRenew: true,
+        },
         data: { expiresAt: newExpiry, lastChargedAt: now },
       });
       if (claim.count === 0) {
