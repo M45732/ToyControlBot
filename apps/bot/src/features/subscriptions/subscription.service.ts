@@ -8,7 +8,7 @@ import { createLogger } from "../../lib/logger.js";
 import {
   addToThread,
   fetchThreadOrThrow,
-  isThreadMember,
+  getThreadMembership,
   removeFromThread,
   resolveThread,
 } from "./subscription.threads.js";
@@ -182,8 +182,15 @@ export async function subscribe(
       where: { planId_subscriberId: { planId: plan.id, subscriberId } },
     });
     if (existing && existing.status === "active" && existing.expiresAt > now) {
+      // Already paid through a future date. Use this as a repair path: if a mod
+      // removal or a failed renewal re-add dropped them from the thread, restore
+      // access (best-effort) instead of just rejecting them.
+      const resolution = await resolveThread(client, plan.threadId);
+      if (resolution.state === "ok") {
+        await addToThread(resolution.thread, subscriberId);
+      }
       throw new UserFacingError(
-        `You're already subscribed — your access runs until <t:${toUnix(existing.expiresAt)}:D>.`,
+        `You're already subscribed — your access runs until <t:${toUnix(existing.expiresAt)}:D>. If you'd lost access to the thread, it's been restored.`,
       );
     }
 
@@ -191,9 +198,11 @@ export async function subscribe(
     // for a fanclub they couldn't be added to. If the add fails (e.g. the bot
     // lacks permission on the private thread) we abort without charging.
     const thread = await fetchThreadOrThrow(client, plan.threadId);
-    // Note whether they were already a member so a later rollback only revokes
-    // access we actually granted (not a manual invite or stale membership).
-    const wasAlreadyMember = await isThreadMember(thread, subscriberId);
+    // Record prior membership so a later rollback only revokes access we can
+    // *prove* we granted. "unknown" (e.g. GuildMembers intent off) is treated
+    // conservatively below — we never revoke on it, to avoid kicking a
+    // pre-existing/manual member.
+    const priorMembership = await getThreadMembership(thread, subscriberId);
     const added = await addToThread(thread, subscriberId);
     if (!added) {
       throw new UserFacingError(
@@ -341,8 +350,10 @@ export async function subscribe(
       }
       // Any other failure (insufficient balance, plan moved, unexpected) means
       // they have no live access, so revoke the thread membership — but only if
-      // we were the ones who added them, never a pre-existing/manual membership.
-      if (!wasAlreadyMember) {
+      // we can prove they weren't already a member. On "member" (pre-existing)
+      // or "unknown" (couldn't determine) we leave them, to avoid kicking a
+      // legitimate manual/pre-existing member.
+      if (priorMembership === "absent") {
         await removeFromThread(client, plan.threadId, subscriberId);
       }
       throw err;

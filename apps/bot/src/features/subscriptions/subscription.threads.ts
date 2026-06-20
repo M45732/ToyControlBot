@@ -95,27 +95,35 @@ export async function fetchThreadOrThrow(
 }
 
 /**
- * Whether a user is already a member of the thread. Used so a failed subscribe
- * only revokes access it actually granted (not a pre-existing/manual membership).
+ * Whether a user is a member of the thread:
+ * - `member`: confirmed present.
+ * - `absent`: confirmed not present (Unknown Member).
+ * - `unknown`: couldn't determine — `ThreadMemberManager#fetch` needs the
+ *   privileged `GuildMembers` intent, which may be off, or the call may fail
+ *   transiently.
+ *
+ * Callers must treat `unknown` conservatively: a failed subscribe should only
+ * revoke access it can prove it granted (`absent`), never on `unknown`, so a
+ * pre-existing/manual member is not kicked.
  */
-export async function isThreadMember(
+export type ThreadMembership = "member" | "absent" | "unknown";
+
+export async function getThreadMembership(
   thread: ThreadChannel,
   userId: string,
-): Promise<boolean> {
+): Promise<ThreadMembership> {
   try {
     await thread.members.fetch(userId);
-    return true;
+    return "member";
   } catch (err) {
     if (isDiscordErrorCode(err, UNKNOWN_MEMBER)) {
-      return false;
+      return "absent";
     }
-    // Unknown — assume not a member so we don't suppress a needed revocation,
-    // but log it since it may indicate a permissions problem.
     log.warn(
       { err, threadId: thread.id, userId },
-      "Thread membership check failed",
+      "Thread membership check indeterminate (GuildMembers intent may be off)",
     );
-    return false;
+    return "unknown";
   }
 }
 
