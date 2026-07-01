@@ -1,4 +1,8 @@
-import { GuildMember, type ChatInputCommandInteraction } from "discord.js";
+import {
+  GuildMember,
+  type ChatInputCommandInteraction,
+  type ButtonInteraction,
+} from "discord.js";
 
 import { UserFacingError } from "../lib/errors.js";
 
@@ -24,7 +28,7 @@ import { UserFacingError } from "../lib/errors.js";
  * @throws {UserFacingError} If the interaction has no guild context.
  */
 export async function requireGuildMember(
-  interaction: ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction | ButtonInteraction,
 ): Promise<GuildMember> {
   if (!interaction.guildId || !interaction.guild) {
     throw new UserFacingError("This command can only be used inside a server.");

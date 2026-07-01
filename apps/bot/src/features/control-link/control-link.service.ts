@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 
 import { prisma } from "../../services/database.service.js";
-import type { ParsedControlLink } from "./control-link.types.js";
+import type { ParsedControlLink, RaffleOptions } from "./control-link.types.js";
 
 const LINK_PATTERNS: Array<{
   pattern: RegExp;
@@ -44,6 +44,7 @@ export async function createRaffle(
   guildId: string,
   link: ParsedControlLink,
   hostId: string,
+  options?: RaffleOptions,
 ): Promise<void> {
   await prisma.raffle.create({
     data: {
@@ -53,6 +54,8 @@ export async function createRaffle(
       hostId,
       linkUrl: link.url,
       linkProvider: link.provider,
+      anonymous: options?.anonymous ?? false,
+      message: options?.message,
     },
   });
 }
@@ -168,14 +171,20 @@ export async function postRaffleEmbed(
   guildId: string,
   channelId: string,
   link: ParsedControlLink,
+  options?: RaffleOptions,
 ): Promise<void> {
+  const host = options?.anonymous ? "An anonymous member" : `<@${authorId}>`;
   const embed = new EmbedBuilder()
     .setTitle("Control Link Raffle")
     .setDescription(
-      `<@${authorId}> shared a **${link.provider}** control link!\n\nClick **Enter Raffle** to join. The host clicks **Pick Winner** when ready.`,
+      `${host} shared a **${link.provider}** control link!\n\nClick **Enter Raffle** to join. The host clicks **Pick Winner** when ready.`,
     )
     .setColor(0x7289da)
     .setFooter({ text: `Provider: ${link.provider}` });
+
+  if (options?.message) {
+    embed.addFields({ name: "Message", value: options.message });
+  }
 
   const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -191,7 +200,7 @@ export async function postRaffleEmbed(
   let raffleMsg: Message;
   raffleMsg = await channel.send({ embeds: [embed], components: [placeholderRow] });
 
-  await createRaffle(raffleMsg.id, channelId, guildId, link, authorId);
+  await createRaffle(raffleMsg.id, channelId, guildId, link, authorId, options);
 
   const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()

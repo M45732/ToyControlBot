@@ -7,6 +7,7 @@ import {
 
 import { config } from "../config/index.js";
 import { createLogger } from "../lib/logger.js";
+import { handleDirectMessage } from "../features/control-link/control-link-dm.message.js";
 import {
   detectControlLink,
   postRaffleEmbed,
@@ -18,7 +19,14 @@ const log = createLogger("messageCreate");
 export const messageCreateEvent = defineEvent({
   name: Events.MessageCreate,
   async execute(message: Message): Promise<void> {
-    if (!message.guildId || message.author.bot) return;
+    if (message.author.bot) return;
+
+    if (!message.guildId) {
+      await handleDirectMessage(message).catch((err: unknown) =>
+        log.error({ err }, "Failed to handle DM"),
+      );
+      return;
+    }
 
     const link = detectControlLink(message.content);
     if (!link) return;

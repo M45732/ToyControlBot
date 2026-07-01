@@ -26,6 +26,7 @@ bot should be cleaner, safer, and easier to maintain.
 | 2026-06-16 | Add a button-handler registry (`apps/bot/src/buttons/`) alongside the command registry | Mirrors the typed command dispatch pattern for interactive components (e.g. toplist pagination) |
 | 2026-06-16 | Wire `interactionCreate` to dispatch commands and buttons, with errors converted to safe user-facing replies | Required for any slash command to actually run; centralizes error-to-message handling |
 | 2026-06-16 | Lovense API token is read lazily from config on each call (`LOVENSE_API_TOKEN`, optional) instead of being required at startup | Lets a guild run the bot before toy control is configured; `/toy-connect` and `/toy-status` fail with a friendly message instead of crashing the whole process on boot |
+| 2026-07-01 | Add a modal-handler registry (`apps/bot/src/modals/`), wired into `interactionCreate.event.ts` alongside commands and buttons | The DM control-link flow's optional message step needed free-text input; no feature had required a modal until now |
 
 ## Behavior changes
 
@@ -47,6 +48,7 @@ bot should be cleaner, safer, and easier to maintain.
 | Subscriptions | UI scaffolding only: `/subscriptions` was a stub with a broken `toycontrol` query; the performer panel had a setup modal and stats panels but no persistence or billing | Full token-priced fanclub: `SubscriptionPlan` + `Subscription` Prisma models, `/subscribe`, `/subscriptions`, `/subscription-cancel`, `/subscription-setup`, `/subscription-stats`, and an hourly auto-renew sweep | Legacy never implemented it; rebuilt deliberately rather than ported |
 | Subscription access mechanism | Legacy comments referenced a "premium channel" + "Link to thread" | Access granted by **private-thread membership**, not a dedicated channel or role | Threads avoid the per-guild channel cap, so one server can host many fanclubs (raised in design review) |
 | Subscription billing | "Auto renew: Yes" / "Renewal costs: 1000 tokens" comments, never coded | Per-subscription `autoRenew` flag; hourly sweep charges due renewals from the token balance, lapsing + removing from the thread on insufficient funds or auto-renew off | Implements the documented intent; charge is conditional (`balance >= price`) so it can never go negative, transient errors retry next sweep instead of revoking access |
+| Control link via DM | DMing the bot a link → "Start" → choose **public or verified-only** channel → anonymous/reveal → optional message → posts to the chosen channel, pings `ROLE_PING_CONTROL_LINK` | DMing the bot a link → "Start" (also checks the sender is a member of the configured guild) → anonymous/reveal → optional message (modal) → posts to the single configured `CHAN_ID_TOY_LINK` channel via the existing `postRaffleEmbed` | Decided with the user 2026-07-01: the public/verified-only channel split doesn't map to the new bot's single-channel control-link model, so it was dropped; the anonymous/reveal choice and optional message were kept and are stored on the `Raffle` row (`anonymous`, `message` columns) |
 
 > Add a row here whenever rebuilt behavior differs from the legacy bot.
 
@@ -55,7 +57,6 @@ bot should be cleaner, safer, and easier to maintain.
 | Feature | Old Location | Status / Reason |
 |---|---|---|
 | Vibration pattern files | `assets/patterns/**` | Present but never parsed in legacy; only migrate if patterns are actually wanted |
-| DM handler | `handlers/dmMessage.js` | Referenced but unimplemented; clarify intent before building |
 | `_backup_dev/` experiments | `legacy/old-bot-readonly/_backup_dev/` | Dead/experimental code; reference only, do not migrate |
 | Channel performer commands | `commands/channel/*` | Legacy stubs; rebuild only if the workflow is still needed |
 

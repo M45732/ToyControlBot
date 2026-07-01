@@ -2,6 +2,7 @@ import { Events, type Interaction } from "discord.js";
 
 import { findButtonHandler } from "../buttons/index.js";
 import { findCommand } from "../commands/index.js";
+import { findModalHandler } from "../modals/index.js";
 import { createLogger } from "../lib/logger.js";
 import { toError, toUserMessage } from "../lib/errors.js";
 import { defineEvent } from "./types.js";
@@ -50,6 +51,29 @@ export const interactionCreateEvent = defineEvent({
         log.error(
           { err: toError(error), customId: interaction.customId },
           "Button handler failed",
+        );
+        const content = toUserMessage(error);
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({ content });
+        } else {
+          await interaction.reply({ content, ephemeral: true });
+        }
+      }
+      return;
+    }
+
+    if (interaction.isModalSubmit()) {
+      const handler = findModalHandler(interaction.customId);
+      if (!handler) {
+        return;
+      }
+
+      try {
+        await handler.execute(interaction);
+      } catch (error) {
+        log.error(
+          { err: toError(error), customId: interaction.customId },
+          "Modal handler failed",
         );
         const content = toUserMessage(error);
         if (interaction.deferred || interaction.replied) {

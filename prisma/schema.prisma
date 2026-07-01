@@ -92,6 +92,10 @@ model Raffle {
   hostId       String
   linkUrl      String
   linkProvider String
+  /// True when the raffle was started via DM and the host chose to stay anonymous.
+  anonymous    Boolean             @default(false)
+  /// Optional host-supplied note shown on the raffle embed (DM flow only).
+  message      String?
   active       Boolean             @default(true)
   createdAt    DateTime            @default(now())
   participants RaffleParticipant[]
