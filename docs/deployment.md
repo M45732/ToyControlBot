@@ -45,10 +45,10 @@ feedback.
 
 ## 4. Build and start commands
 
-Railway's Nixpacks builder auto-detects the `npm run build` / `npm start`
-scripts in `package.json`, so no custom build/start commands need to be
-configured in the Railway dashboard. For clarity, `railway.json` in the
-repo root also declares them explicitly.
+Railway's default Railpack builder auto-detects the `npm run build` /
+`npm start` scripts in `package.json`, so no custom build/start commands
+need to be configured in the Railway dashboard. For clarity, `railway.json`
+in the repo root also declares them explicitly (`build.builder: "RAILPACK"`).
 
 What each step does:
 
