@@ -100,6 +100,11 @@ Start production:
 npm start
 ```
 
+`npm start` applies pending database migrations (`prisma migrate deploy`)
+and re-registers slash commands before starting the bot, so it's safe to
+use directly as a platform start command. See `docs/deployment.md` for the
+Railway + Postgres setup.
+
 ## Environment variables
 
 Create `.env.example` like this:
@@ -134,6 +139,7 @@ Important docs:
 docs/architecture.md
 docs/feature-map.md
 docs/migration-notes.md
+docs/deployment.md
 AGENTS.md
 ```
 
