@@ -76,6 +76,16 @@ function fieldValue(interaction: ButtonInteraction, name: string): string | unde
   return interaction.message.embeds[0]?.fields.find((field) => field.name === name)?.value;
 }
 
+/**
+ * In-flight "Start Raffle" clicks, keyed by wizard message id. Guards against
+ * a double-click (or two clients) posting the same link as two separate
+ * public raffles before the first click's `editReply` clears the button.
+ * Safe because the has()+add() pair runs without an await between them, so
+ * it is atomic within Node's single-threaded event loop (same pattern as the
+ * subscribe flow).
+ */
+const pendingRaffleStarts = new Set<string>();
+
 const startHandler: ButtonHandler = {
   matches: (customId) => customId === `${PREFIX}start`,
   async execute(interaction: ButtonInteraction): Promise<void> {
@@ -135,28 +145,38 @@ const addMessageHandler: ButtonHandler = {
 const startRaffleHandler: ButtonHandler = {
   matches: (customId) => customId === `${PREFIX}start-raffle`,
   async execute(interaction: ButtonInteraction): Promise<void> {
-    const link = requireLink(interaction);
-    const anonymous = fieldValue(interaction, "Anonymous") === "yes";
-    const message = fieldValue(interaction, "Message");
-
-    const target = await resolveRaffleChannel(interaction.client);
-    if (!target) {
-      throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
+    const wizardKey = interaction.message.id;
+    if (pendingRaffleStarts.has(wizardKey)) {
+      throw new UserFacingError("Already posting this raffle — hang tight.");
     }
+    pendingRaffleStarts.add(wizardKey);
 
-    await requireRaffleChannelAccess(target, interaction.user.id);
+    try {
+      const link = requireLink(interaction);
+      const anonymous = fieldValue(interaction, "Anonymous") === "yes";
+      const message = fieldValue(interaction, "Message");
 
-    await interaction.deferUpdate();
+      const target = await resolveRaffleChannel(interaction.client);
+      if (!target) {
+        throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
+      }
 
-    await postRaffleEmbed(target.channel, interaction.user.id, target.guild.id, target.channel.id, link, {
-      anonymous,
-      message: message && message !== "-" ? message : undefined,
-    });
+      await requireRaffleChannelAccess(target, interaction.user.id);
 
-    await interaction.editReply({
-      embeds: [buildSentEmbed(target.channel.id)],
-      components: [],
-    });
+      await interaction.deferUpdate();
+
+      await postRaffleEmbed(target.channel, interaction.user.id, target.guild.id, target.channel.id, link, {
+        anonymous,
+        message: message && message !== "-" ? message : undefined,
+      });
+
+      await interaction.editReply({
+        embeds: [buildSentEmbed(target.channel.id)],
+        components: [],
+      });
+    } finally {
+      pendingRaffleStarts.delete(wizardKey);
+    }
   },
 };
 
