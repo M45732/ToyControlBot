@@ -2,7 +2,11 @@ import type { ModalSubmitInteraction } from "discord.js";
 
 import type { ModalHandler } from "../../modals/types.js";
 import { UserFacingError } from "../../lib/errors.js";
-import { detectControlLink, resolveRaffleChannel } from "./control-link.service.js";
+import {
+  detectControlLink,
+  requireRaffleChannelAccess,
+  resolveRaffleChannel,
+} from "./control-link.service.js";
 import { PREFIX, anonymousChoiceRow, messageStepRow } from "./control-link-dm.buttons.js";
 import {
   buildAnonymousChoiceEmbed,
@@ -57,12 +61,7 @@ const linkModalHandler: ModalHandler = {
       throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
     }
 
-    const isMember = await target.guild.members.fetch(interaction.user.id).catch(() => null);
-    if (!isMember) {
-      throw new UserFacingError(
-        `You need to be a member of **${target.guild.name}** to raffle a link there.`,
-      );
-    }
+    await requireRaffleChannelAccess(target, interaction.user.id);
 
     await interaction.reply({
       embeds: [buildAnonymousChoiceEmbed(link)],

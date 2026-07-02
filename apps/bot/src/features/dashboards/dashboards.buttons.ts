@@ -37,7 +37,7 @@ const dashboardButtonHandler: ButtonHandler = {
           );
         }
 
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
 
         const result = await claimDaily(interaction.guildId, interaction.user.id, {
           isBooster: isServerBooster(member),
@@ -62,7 +62,7 @@ const dashboardButtonHandler: ButtonHandler = {
       }
 
       case "toplist": {
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
 
         const rank = await getRank(interaction.guildId, interaction.user.id);
         const description = rank

@@ -4,13 +4,16 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  PermissionFlagsBits,
   type Client,
   type Guild,
+  type GuildMember,
   type Message,
   ThreadChannel,
 } from "discord.js";
 
 import { config } from "../../config/index.js";
+import { UserFacingError } from "../../lib/errors.js";
 import { prisma } from "../../services/database.service.js";
 import type { ParsedControlLink, RaffleOptions } from "./control-link.types.js";
 
@@ -63,6 +66,36 @@ export async function resolveRaffleChannel(client: Client): Promise<RaffleTarget
   if (!channel || !(channel instanceof BaseGuildTextChannel)) return null;
 
   return { channel, guild: channel.guild };
+}
+
+/**
+ * Verify a user (raffling a link in from outside the channel, via DM or
+ * `/control-link-raffle`) is actually allowed to post in the target raffle
+ * channel — guild membership alone isn't enough, since `target.channel` may
+ * be restricted to a role the user doesn't have. Without this check, anyone
+ * in the guild could raffle a link into a channel they can't otherwise view
+ * or post in, bypassing the same permissions the in-channel flow naturally
+ * respects.
+ *
+ * @throws {UserFacingError} If the user isn't a guild member, or can't view/send in the channel.
+ */
+export async function requireRaffleChannelAccess(
+  target: RaffleTarget,
+  userId: string,
+): Promise<GuildMember> {
+  const member = await target.guild.members.fetch(userId).catch(() => null);
+  if (!member) {
+    throw new UserFacingError(
+      `You need to be a member of **${target.guild.name}** to raffle a link there.`,
+    );
+  }
+
+  const permissions = target.channel.permissionsFor(member);
+  if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.SendMessages)) {
+    throw new UserFacingError(`You don't have access to <#${target.channel.id}> to raffle a link there.`);
+  }
+
+  return member;
 }
 
 export async function createRaffle(

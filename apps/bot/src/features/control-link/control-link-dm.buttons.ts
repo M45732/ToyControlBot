@@ -10,7 +10,12 @@ import {
 
 import type { ButtonHandler } from "../../buttons/types.js";
 import { UserFacingError } from "../../lib/errors.js";
-import { detectControlLink, postRaffleEmbed, resolveRaffleChannel } from "./control-link.service.js";
+import {
+  detectControlLink,
+  postRaffleEmbed,
+  requireRaffleChannelAccess,
+  resolveRaffleChannel,
+} from "./control-link.service.js";
 import {
   buildAnonymousChoiceEmbed,
   buildMessageStepEmbed,
@@ -81,12 +86,7 @@ const startHandler: ButtonHandler = {
       throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
     }
 
-    const isMember = await target.guild.members.fetch(interaction.user.id).catch(() => null);
-    if (!isMember) {
-      throw new UserFacingError(
-        `You need to be a member of **${target.guild.name}** to raffle a link there.`,
-      );
-    }
+    await requireRaffleChannelAccess(target, interaction.user.id);
 
     await interaction.update({
       embeds: [buildAnonymousChoiceEmbed(link)],
@@ -144,12 +144,7 @@ const startRaffleHandler: ButtonHandler = {
       throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
     }
 
-    const isMember = await target.guild.members.fetch(interaction.user.id).catch(() => null);
-    if (!isMember) {
-      throw new UserFacingError(
-        `You need to be a member of **${target.guild.name}** to raffle a link there.`,
-      );
-    }
+    await requireRaffleChannelAccess(target, interaction.user.id);
 
     await interaction.deferUpdate();
 
