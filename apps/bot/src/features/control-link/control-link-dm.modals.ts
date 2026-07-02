@@ -2,16 +2,12 @@ import type { ModalSubmitInteraction } from "discord.js";
 
 import type { ModalHandler } from "../../modals/types.js";
 import { UserFacingError } from "../../lib/errors.js";
-import {
-  detectControlLink,
-  requireRaffleChannelAccess,
-  resolveRaffleChannel,
-} from "./control-link.service.js";
+import { detectControlLink, requireRaffleTarget } from "./control-link.service.js";
 import { PREFIX, anonymousChoiceRow, messageStepRow } from "./control-link-dm.buttons.js";
 import {
   buildAnonymousChoiceEmbed,
   buildMessageStepEmbed,
-  readLinkFromEmbed,
+  readWizardState,
 } from "./control-link-dm.service.js";
 
 const messageModalHandler: ModalHandler = {
@@ -21,19 +17,15 @@ const messageModalHandler: ModalHandler = {
       throw new UserFacingError("This raffle link expired or is no longer valid. Send it again.");
     }
 
-    const url = readLinkFromEmbed(interaction.message.embeds[0] ?? null);
-    const link = url ? detectControlLink(url) : null;
-    if (!link) {
+    const state = readWizardState(interaction.message.embeds[0] ?? null);
+    if (!state) {
       throw new UserFacingError("This raffle link expired or is no longer valid. Send it again.");
     }
 
-    const anonymous =
-      interaction.message.embeds[0]?.fields.find((field) => field.name === "Anonymous")?.value ===
-      "yes";
     const message = interaction.fields.getTextInputValue("message-text").trim();
 
     await interaction.update({
-      embeds: [buildMessageStepEmbed(link, anonymous, message)],
+      embeds: [buildMessageStepEmbed(state.link, state.anonymous, message)],
       components: [messageStepRow()],
     });
   },
@@ -42,7 +34,7 @@ const messageModalHandler: ModalHandler = {
 /**
  * Submit handler for the `/control-link-raffle` link-entry modal. Unlike
  * `messageModalHandler`, this one isn't attached to an existing wizard
- * message — it's the very first response, so it replies (ephemerally)
+ * message — it's the very first response, so it defers/replies (ephemerally)
  * rather than updating, then hands off to the same anonymous/reveal step.
  */
 const linkModalHandler: ModalHandler = {
@@ -56,17 +48,15 @@ const linkModalHandler: ModalHandler = {
       );
     }
 
-    const target = await resolveRaffleChannel(interaction.client);
-    if (!target) {
-      throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
-    }
+    // Ack first — resolving the target channel and checking access are both
+    // REST-backed and could otherwise blow the 3-second ack window.
+    await interaction.deferReply({ ephemeral: true });
 
-    await requireRaffleChannelAccess(target, interaction.user.id);
+    const target = await requireRaffleTarget(interaction.client, interaction.user.id);
 
-    await interaction.reply({
+    await interaction.editReply({
       embeds: [buildAnonymousChoiceEmbed(link)],
       components: [anonymousChoiceRow()],
-      ephemeral: true,
     });
   },
 };

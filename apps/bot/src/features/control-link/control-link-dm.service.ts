@@ -1,16 +1,51 @@
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, type Embed } from "discord.js";
 
+import { detectControlLink } from "./control-link.service.js";
 import type { ParsedControlLink } from "./control-link.types.js";
 
 const BRAND_COLOR = 0x00ffff;
 
 /**
- * Read back the link URL carried in the "Link" field of the wizard embed
- * attached to the bot's own DM message, so each step doesn't need external
- * state storage.
+ * Field names used to carry wizard state (link, anonymity choice, optional
+ * message) between interaction steps on the bot's own message embed, plus
+ * the sentinel written for "no message set". Defined once here — and only
+ * read/written through `readWizardState`/the embed builders below — so the
+ * two sides of the round-trip can't drift out of sync.
  */
-export function readLinkFromEmbed(embed: { fields: { name: string; value: string }[] } | null): string | null {
-  return embed?.fields.find((field) => field.name === "Link")?.value ?? null;
+const FIELD_LINK = "Link";
+const FIELD_ANONYMOUS = "Anonymous";
+const FIELD_MESSAGE = "Message";
+const EMPTY_MESSAGE = "-";
+
+export interface WizardState {
+  readonly link: ParsedControlLink;
+  readonly anonymous: boolean;
+  /** Undefined when no message was set (never the literal empty-message sentinel). */
+  readonly message: string | undefined;
+}
+
+function fieldValue(embed: Embed | null, name: string): string | undefined {
+  return embed?.fields.find((field) => field.name === name)?.value;
+}
+
+/**
+ * Read back whatever wizard state is present on a message's embed. Returns
+ * null if there's no valid "Link" field to recover — the single place every
+ * step checks that the wizard message it's operating on is still valid,
+ * instead of each handler re-deriving the link/anonymous/message fields
+ * itself.
+ */
+export function readWizardState(embed: Embed | null): WizardState | null {
+  const url = fieldValue(embed, FIELD_LINK);
+  const link = url ? detectControlLink(url) : null;
+  if (!link) return null;
+
+  const rawMessage = fieldValue(embed, FIELD_MESSAGE);
+  return {
+    link,
+    anonymous: fieldValue(embed, FIELD_ANONYMOUS) === "yes",
+    message: rawMessage && rawMessage !== EMPTY_MESSAGE ? rawMessage : undefined,
+  };
 }
 
 export function buildLinkDetectedEmbed(link: ParsedControlLink, guildName: string): EmbedBuilder {
@@ -20,7 +55,7 @@ export function buildLinkDetectedEmbed(link: ParsedControlLink, guildName: strin
       `This looks like a **${link.provider}** control link.\n\nClick **Start** to raffle it off in **${guildName}**.`,
     )
     .setColor(BRAND_COLOR)
-    .addFields({ name: "Link", value: link.url });
+    .addFields({ name: FIELD_LINK, value: link.url });
 }
 
 export function buildAnonymousChoiceEmbed(link: ParsedControlLink): EmbedBuilder {
@@ -30,7 +65,7 @@ export function buildAnonymousChoiceEmbed(link: ParsedControlLink): EmbedBuilder
       "The raffle post can show your name, or stay anonymous. Please select:",
     )
     .setColor(BRAND_COLOR)
-    .addFields({ name: "Link", value: link.url });
+    .addFields({ name: FIELD_LINK, value: link.url });
 }
 
 export function buildMessageStepEmbed(
@@ -43,9 +78,9 @@ export function buildMessageStepEmbed(
     .setDescription("Click **Start Raffle** when you're ready to post it.")
     .setColor(BRAND_COLOR)
     .addFields(
-      { name: "Link", value: link.url },
-      { name: "Anonymous", value: anonymous ? "yes" : "no", inline: true },
-      { name: "Message", value: message || "-", inline: true },
+      { name: FIELD_LINK, value: link.url },
+      { name: FIELD_ANONYMOUS, value: anonymous ? "yes" : "no", inline: true },
+      { name: FIELD_MESSAGE, value: message || EMPTY_MESSAGE, inline: true },
     );
 }
 

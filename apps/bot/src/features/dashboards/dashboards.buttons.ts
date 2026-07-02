@@ -64,12 +64,13 @@ const dashboardButtonHandler: ButtonHandler = {
       case "toplist": {
         await interaction.deferReply({ ephemeral: true });
 
-        const rank = await getRank(interaction.guildId, interaction.user.id);
+        const [rank, { entries, page, totalPages }] = await Promise.all([
+          getRank(interaction.guildId, interaction.user.id),
+          getToplistPage(interaction.guildId, 1),
+        ]);
         const description = rank
           ? `<@${interaction.user.id}> is #${rank} in the toplist`
           : `<@${interaction.user.id}> has no token yet.`;
-
-        const { entries, page, totalPages } = await getToplistPage(interaction.guildId, 1);
 
         await interaction.editReply({
           embeds: [buildToplistEmbed(entries, page, totalPages, description)],

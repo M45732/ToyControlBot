@@ -14,6 +14,7 @@ import {
 
 import { config } from "../../config/index.js";
 import { UserFacingError } from "../../lib/errors.js";
+import { fetchGuildMember } from "../../services/permission.service.js";
 import { prisma } from "../../services/database.service.js";
 import type { ParsedControlLink, RaffleOptions } from "./control-link.types.js";
 
@@ -83,7 +84,7 @@ export async function requireRaffleChannelAccess(
   target: RaffleTarget,
   userId: string,
 ): Promise<GuildMember> {
-  const member = await target.guild.members.fetch(userId).catch(() => null);
+  const member = await fetchGuildMember(target.guild, userId);
   if (!member) {
     throw new UserFacingError(
       `You need to be a member of **${target.guild.name}** to raffle a link there.`,
@@ -96,6 +97,23 @@ export async function requireRaffleChannelAccess(
   }
 
   return member;
+}
+
+/**
+ * Resolve the raffle channel and verify the user can post there, in one
+ * call — the "resolve → not-configured check → access check" sequence every
+ * out-of-band raffle entry point (DM wizard, `/control-link-raffle`) needs.
+ *
+ * @throws {UserFacingError} If the channel isn't configured/resolvable, or the user lacks access.
+ */
+export async function requireRaffleTarget(client: Client, userId: string): Promise<RaffleTarget> {
+  const target = await resolveRaffleChannel(client);
+  if (!target) {
+    throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
+  }
+
+  await requireRaffleChannelAccess(target, userId);
+  return target;
 }
 
 export async function createRaffle(

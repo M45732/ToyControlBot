@@ -10,17 +10,12 @@ import {
 
 import type { ButtonHandler } from "../../buttons/types.js";
 import { UserFacingError } from "../../lib/errors.js";
-import {
-  detectControlLink,
-  postRaffleEmbed,
-  requireRaffleChannelAccess,
-  resolveRaffleChannel,
-} from "./control-link.service.js";
+import { postRaffleEmbed, requireRaffleTarget } from "./control-link.service.js";
 import {
   buildAnonymousChoiceEmbed,
   buildMessageStepEmbed,
   buildSentEmbed,
-  readLinkFromEmbed,
+  readWizardState,
 } from "./control-link-dm.service.js";
 
 /**
@@ -62,18 +57,13 @@ export function messageStepRow(): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
-/** Re-derive the parsed link (with provider) from the raw URL stored in the wizard embed. */
-function requireLink(interaction: ButtonInteraction) {
-  const url = readLinkFromEmbed(interaction.message.embeds[0] ?? null);
-  const link = url ? detectControlLink(url) : null;
-  if (!link) {
+/** Re-derive wizard state (link, anonymous flag, message) from the bot's own wizard message. */
+function requireWizardState(interaction: ButtonInteraction) {
+  const state = readWizardState(interaction.message.embeds[0] ?? null);
+  if (!state) {
     throw new UserFacingError("This raffle link expired or is no longer valid. Send it again.");
   }
-  return link;
-}
-
-function fieldValue(interaction: ButtonInteraction, name: string): string | undefined {
-  return interaction.message.embeds[0]?.fields.find((field) => field.name === name)?.value;
+  return state;
 }
 
 /**
@@ -89,16 +79,17 @@ const pendingRaffleStarts = new Set<string>();
 const startHandler: ButtonHandler = {
   matches: (customId) => customId === `${PREFIX}start`,
   async execute(interaction: ButtonInteraction): Promise<void> {
-    const link = requireLink(interaction);
+    const { link } = requireWizardState(interaction);
 
-    const target = await resolveRaffleChannel(interaction.client);
-    if (!target) {
-      throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
-    }
+    // Ack first, then do the REST-backed target/access checks — a cache miss
+    // on either could otherwise blow Discord's 3-second ack window and make
+    // the click silently fail (interaction.update() throwing "Unknown
+    // interaction" with no working fallback response).
+    await interaction.deferUpdate();
 
-    await requireRaffleChannelAccess(target, interaction.user.id);
+    const target = await requireRaffleTarget(interaction.client, interaction.user.id);
 
-    await interaction.update({
+    await interaction.editReply({
       embeds: [buildAnonymousChoiceEmbed(link)],
       components: [anonymousChoiceRow()],
     });
@@ -108,7 +99,7 @@ const startHandler: ButtonHandler = {
 const anonymityHandler: ButtonHandler = {
   matches: (customId) => customId === `${PREFIX}anon` || customId === `${PREFIX}reveal`,
   async execute(interaction: ButtonInteraction): Promise<void> {
-    const link = requireLink(interaction);
+    const { link } = requireWizardState(interaction);
     const anonymous = interaction.customId === `${PREFIX}anon`;
 
     await interaction.update({
@@ -121,7 +112,7 @@ const anonymityHandler: ButtonHandler = {
 const addMessageHandler: ButtonHandler = {
   matches: (customId) => customId === `${PREFIX}add-message`,
   async execute(interaction: ButtonInteraction): Promise<void> {
-    const currentMessage = fieldValue(interaction, "Message");
+    const { message: currentMessage } = requireWizardState(interaction);
 
     const input = new TextInputBuilder()
       .setCustomId("message-text")
@@ -129,7 +120,7 @@ const addMessageHandler: ButtonHandler = {
       .setStyle(TextInputStyle.Paragraph)
       .setMaxLength(500)
       .setRequired(false);
-    if (currentMessage && currentMessage !== "-") {
+    if (currentMessage) {
       input.setValue(currentMessage);
     }
 
@@ -151,31 +142,33 @@ const startRaffleHandler: ButtonHandler = {
     }
     pendingRaffleStarts.add(wizardKey);
 
+    // Only released on a failure *before* the raffle is actually posted. If
+    // postRaffleEmbed succeeds but the trailing editReply (clearing the
+    // button) fails, the guard must stay held — otherwise a stale click on
+    // the still-visible button would post a second, duplicate raffle for
+    // the same link.
+    let posted = false;
     try {
-      const link = requireLink(interaction);
-      const anonymous = fieldValue(interaction, "Anonymous") === "yes";
-      const message = fieldValue(interaction, "Message");
-
-      const target = await resolveRaffleChannel(interaction.client);
-      if (!target) {
-        throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
-      }
-
-      await requireRaffleChannelAccess(target, interaction.user.id);
+      const { link, anonymous, message } = requireWizardState(interaction);
 
       await interaction.deferUpdate();
 
+      const target = await requireRaffleTarget(interaction.client, interaction.user.id);
+
       await postRaffleEmbed(target.channel, interaction.user.id, target.guild.id, target.channel.id, link, {
         anonymous,
-        message: message && message !== "-" ? message : undefined,
+        message,
       });
+      posted = true;
 
       await interaction.editReply({
         embeds: [buildSentEmbed(target.channel.id)],
         components: [],
       });
     } finally {
-      pendingRaffleStarts.delete(wizardKey);
+      if (!posted) {
+        pendingRaffleStarts.delete(wizardKey);
+      }
     }
   },
 };
