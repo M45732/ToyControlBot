@@ -1,3 +1,4 @@
+import { controlLinkDmButtons } from "../features/control-link/control-link-dm.buttons.js";
 import { controlLinkButtons } from "../features/control-link/control-link.buttons.js";
 import { dashboardButtons } from "../features/dashboards/dashboards.buttons.js";
 import { economyButtons } from "../features/economy/economy.buttons.js";
@@ -14,6 +15,7 @@ export const buttons: ButtonHandler[] = [
   ...economyButtons,
   ...sessionButtons,
   ...controlLinkButtons,
+  ...controlLinkDmButtons,
   ...dashboardButtons,
 ];
 

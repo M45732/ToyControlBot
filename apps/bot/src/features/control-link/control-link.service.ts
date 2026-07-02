@@ -4,12 +4,19 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  PermissionFlagsBits,
+  type Client,
+  type Guild,
+  type GuildMember,
   type Message,
   ThreadChannel,
 } from "discord.js";
 
+import { config } from "../../config/index.js";
+import { UserFacingError } from "../../lib/errors.js";
+import { fetchGuildMember } from "../../services/permission.service.js";
 import { prisma } from "../../services/database.service.js";
-import type { ParsedControlLink } from "./control-link.types.js";
+import type { ParsedControlLink, RaffleOptions } from "./control-link.types.js";
 
 const LINK_PATTERNS: Array<{
   pattern: RegExp;
@@ -38,12 +45,84 @@ export function detectControlLink(content: string): ParsedControlLink | null {
   return null;
 }
 
+export interface RaffleTarget {
+  readonly channel: BaseGuildTextChannel;
+  readonly guild: Guild;
+}
+
+/**
+ * Resolve where an out-of-band control link (DM, slash command) should be
+ * raffled off: the same channel already configured for in-guild control-link
+ * posting.
+ *
+ * Returns null if `CHAN_ID_TOY_LINK` isn't configured, or the channel can't
+ * be resolved (deleted, bot kicked, etc.) — the calling flow is disabled in
+ * that case rather than guessing a guild.
+ */
+export async function resolveRaffleChannel(client: Client): Promise<RaffleTarget | null> {
+  const { allowedChannelId } = config.controlLink;
+  if (!allowedChannelId) return null;
+
+  const channel = await client.channels.fetch(allowedChannelId).catch(() => null);
+  if (!channel || !(channel instanceof BaseGuildTextChannel)) return null;
+
+  return { channel, guild: channel.guild };
+}
+
+/**
+ * Verify a user (raffling a link in from outside the channel, via DM or
+ * `/control-link-raffle`) is actually allowed to post in the target raffle
+ * channel — guild membership alone isn't enough, since `target.channel` may
+ * be restricted to a role the user doesn't have. Without this check, anyone
+ * in the guild could raffle a link into a channel they can't otherwise view
+ * or post in, bypassing the same permissions the in-channel flow naturally
+ * respects.
+ *
+ * @throws {UserFacingError} If the user isn't a guild member, or can't view/send in the channel.
+ */
+export async function requireRaffleChannelAccess(
+  target: RaffleTarget,
+  userId: string,
+): Promise<GuildMember> {
+  const member = await fetchGuildMember(target.guild, userId);
+  if (!member) {
+    throw new UserFacingError(
+      `You need to be a member of **${target.guild.name}** to raffle a link there.`,
+    );
+  }
+
+  const permissions = target.channel.permissionsFor(member);
+  if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.SendMessages)) {
+    throw new UserFacingError(`You don't have access to <#${target.channel.id}> to raffle a link there.`);
+  }
+
+  return member;
+}
+
+/**
+ * Resolve the raffle channel and verify the user can post there, in one
+ * call — the "resolve → not-configured check → access check" sequence every
+ * out-of-band raffle entry point (DM wizard, `/control-link-raffle`) needs.
+ *
+ * @throws {UserFacingError} If the channel isn't configured/resolvable, or the user lacks access.
+ */
+export async function requireRaffleTarget(client: Client, userId: string): Promise<RaffleTarget> {
+  const target = await resolveRaffleChannel(client);
+  if (!target) {
+    throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
+  }
+
+  await requireRaffleChannelAccess(target, userId);
+  return target;
+}
+
 export async function createRaffle(
   raffleMessageId: string,
   channelId: string,
   guildId: string,
   link: ParsedControlLink,
   hostId: string,
+  options?: RaffleOptions,
 ): Promise<void> {
   await prisma.raffle.create({
     data: {
@@ -53,6 +132,8 @@ export async function createRaffle(
       hostId,
       linkUrl: link.url,
       linkProvider: link.provider,
+      anonymous: options?.anonymous ?? false,
+      message: options?.message,
     },
   });
 }
@@ -168,14 +249,20 @@ export async function postRaffleEmbed(
   guildId: string,
   channelId: string,
   link: ParsedControlLink,
+  options?: RaffleOptions,
 ): Promise<void> {
+  const host = options?.anonymous ? "An anonymous member" : `<@${authorId}>`;
   const embed = new EmbedBuilder()
     .setTitle("Control Link Raffle")
     .setDescription(
-      `<@${authorId}> shared a **${link.provider}** control link!\n\nClick **Enter Raffle** to join. The host clicks **Pick Winner** when ready.`,
+      `${host} shared a **${link.provider}** control link!\n\nClick **Enter Raffle** to join. The host clicks **Pick Winner** when ready.`,
     )
     .setColor(0x7289da)
     .setFooter({ text: `Provider: ${link.provider}` });
+
+  if (options?.message) {
+    embed.addFields({ name: "Message", value: options.message });
+  }
 
   const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -191,7 +278,7 @@ export async function postRaffleEmbed(
   let raffleMsg: Message;
   raffleMsg = await channel.send({ embeds: [embed], components: [placeholderRow] });
 
-  await createRaffle(raffleMsg.id, channelId, guildId, link, authorId);
+  await createRaffle(raffleMsg.id, channelId, guildId, link, authorId, options);
 
   const updatedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
