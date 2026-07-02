@@ -1,12 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type Message } from "discord.js";
 
 import { createLogger } from "../../lib/logger.js";
-import { detectControlLink } from "./control-link.service.js";
-import {
-  buildLinkDetectedEmbed,
-  buildUnsupportedLinkEmbed,
-  resolveDmRaffleTarget,
-} from "./control-link-dm.service.js";
+import { detectControlLink, resolveRaffleChannel } from "./control-link.service.js";
+import { buildLinkDetectedEmbed, buildUnsupportedLinkEmbed } from "./control-link-dm.service.js";
 
 const log = createLogger("control-link-dm");
 
@@ -27,17 +23,17 @@ export async function handleDirectMessage(message: Message): Promise<void> {
     return;
   }
 
-  const target = await resolveDmRaffleTarget(message.client);
+  const target = await resolveRaffleChannel(message.client);
   if (!target) {
     await message
-      .reply("Sorry, this bot isn't set up to raffle DM'd control links right now.")
+      .reply("Sorry, this bot isn't set up to raffle control links right now.")
       .catch(() => undefined);
     return;
   }
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId("control-link-dm:start")
+      .setCustomId("control-link-raffle:start")
       .setLabel("Start")
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("✅"),

@@ -10,18 +10,24 @@ import {
 
 import type { ButtonHandler } from "../../buttons/types.js";
 import { UserFacingError } from "../../lib/errors.js";
-import { detectControlLink, postRaffleEmbed } from "./control-link.service.js";
+import { detectControlLink, postRaffleEmbed, resolveRaffleChannel } from "./control-link.service.js";
 import {
   buildAnonymousChoiceEmbed,
   buildMessageStepEmbed,
   buildSentEmbed,
   readLinkFromEmbed,
-  resolveDmRaffleTarget,
 } from "./control-link-dm.service.js";
 
-const PREFIX = "control-link-dm:";
+/**
+ * customId prefix for the shared "anonymous / message / start raffle" wizard.
+ * Entered either from a DM'd link (`control-link-dm.message.ts`) or from
+ * `/control-link-raffle` (`control-link.commands.ts`) — both land on the same
+ * steps below, since the wizard only reads state back from the message's
+ * embed fields and doesn't care how it was started.
+ */
+export const PREFIX = "control-link-raffle:";
 
-function anonymousChoiceRow(): ActionRowBuilder<ButtonBuilder> {
+export function anonymousChoiceRow(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`${PREFIX}anon`)
@@ -70,9 +76,9 @@ const startHandler: ButtonHandler = {
   async execute(interaction: ButtonInteraction): Promise<void> {
     const link = requireLink(interaction);
 
-    const target = await resolveDmRaffleTarget(interaction.client);
+    const target = await resolveRaffleChannel(interaction.client);
     if (!target) {
-      throw new UserFacingError("Sorry, this bot isn't set up to raffle DM'd control links right now.");
+      throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
     }
 
     const isMember = await target.guild.members.fetch(interaction.user.id).catch(() => null);
@@ -133,9 +139,9 @@ const startRaffleHandler: ButtonHandler = {
     const anonymous = fieldValue(interaction, "Anonymous") === "yes";
     const message = fieldValue(interaction, "Message");
 
-    const target = await resolveDmRaffleTarget(interaction.client);
+    const target = await resolveRaffleChannel(interaction.client);
     if (!target) {
-      throw new UserFacingError("Sorry, this bot isn't set up to raffle DM'd control links right now.");
+      throw new UserFacingError("Sorry, this bot isn't set up to raffle control links right now.");
     }
 
     const isMember = await target.guild.members.fetch(interaction.user.id).catch(() => null);

@@ -4,6 +4,7 @@ import type {
 } from "discord.js";
 
 import { channelCommands } from "../features/channel/channel.commands.js";
+import { controlLinkCommands } from "../features/control-link/control-link.commands.js";
 import { dashboardCommands } from "../features/dashboards/dashboards.commands.js";
 import { economyCommands } from "../features/economy/economy.commands.js";
 import { lovenseCommands } from "../features/lovense/lovense.commands.js";
@@ -36,6 +37,7 @@ export const commands: SlashCommand[] = [
   ...sessionCommands,
   ...tippingCommands,
   ...subscriptionCommands,
+  ...controlLinkCommands,
   ...channelCommands,
   ...dashboardCommands,
   ...utilityCommands,

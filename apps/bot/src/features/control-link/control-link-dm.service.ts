@@ -1,37 +1,8 @@
-import {
-  BaseGuildTextChannel,
-  EmbedBuilder,
-  type Client,
-  type Guild,
-} from "discord.js";
+import { EmbedBuilder } from "discord.js";
 
-import { config } from "../../config/index.js";
 import type { ParsedControlLink } from "./control-link.types.js";
 
 const BRAND_COLOR = 0x00ffff;
-
-export interface DmRaffleTarget {
-  readonly channel: BaseGuildTextChannel;
-  readonly guild: Guild;
-}
-
-/**
- * Resolve where a DM-submitted control link should be raffled off: the same
- * channel already configured for in-guild control-link posting.
- *
- * Returns null if `CHAN_ID_TOY_LINK` isn't configured, or the channel can't
- * be resolved (deleted, bot kicked, etc.) — the DM flow is disabled in that
- * case rather than guessing a guild.
- */
-export async function resolveDmRaffleTarget(client: Client): Promise<DmRaffleTarget | null> {
-  const { allowedChannelId } = config.controlLink;
-  if (!allowedChannelId) return null;
-
-  const channel = await client.channels.fetch(allowedChannelId).catch(() => null);
-  if (!channel || !(channel instanceof BaseGuildTextChannel)) return null;
-
-  return { channel, guild: channel.guild };
-}
 
 /**
  * Read back the link URL carried in the "Link" field of the wizard embed

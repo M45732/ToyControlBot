@@ -4,10 +4,13 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  type Client,
+  type Guild,
   type Message,
   ThreadChannel,
 } from "discord.js";
 
+import { config } from "../../config/index.js";
 import { prisma } from "../../services/database.service.js";
 import type { ParsedControlLink, RaffleOptions } from "./control-link.types.js";
 
@@ -36,6 +39,30 @@ export function detectControlLink(content: string): ParsedControlLink | null {
     }
   }
   return null;
+}
+
+export interface RaffleTarget {
+  readonly channel: BaseGuildTextChannel;
+  readonly guild: Guild;
+}
+
+/**
+ * Resolve where an out-of-band control link (DM, slash command) should be
+ * raffled off: the same channel already configured for in-guild control-link
+ * posting.
+ *
+ * Returns null if `CHAN_ID_TOY_LINK` isn't configured, or the channel can't
+ * be resolved (deleted, bot kicked, etc.) — the calling flow is disabled in
+ * that case rather than guessing a guild.
+ */
+export async function resolveRaffleChannel(client: Client): Promise<RaffleTarget | null> {
+  const { allowedChannelId } = config.controlLink;
+  if (!allowedChannelId) return null;
+
+  const channel = await client.channels.fetch(allowedChannelId).catch(() => null);
+  if (!channel || !(channel instanceof BaseGuildTextChannel)) return null;
+
+  return { channel, guild: channel.guild };
 }
 
 export async function createRaffle(
